@@ -7,7 +7,7 @@ import subprocess
 import time
 from datetime import datetime
 
-from snippet import _clean_cmds, _flatten_to_tuple_of_strings, _source
+from .snippet import _clean_cmds, _flatten_to_tuple_of_strings, _source
 
 # from pprint import pformat, pprint
 # from objexplore import explore  # type: ignore # e.g. explore(object) # VERY GOOD pip install objexplore
@@ -76,7 +76,7 @@ class GnuplotController:
 
         Showing the plot maintains synchronisation between the gnuplot plot window
         and the python terminal during manual interaction.
-        Note: from Gnuplot help, a plot command for Gnuplot looks like this:
+        Note: (from Gnuplot help), a plot command for Gnuplot looks like this:
           plot {<ranges>} <plot-element> {, <plot-element>, <plot-element>}
         :param plot_elements: Gnuplot "<plot-element> {, <plot-element>, <plot-element>}" 
         :param plot_and_ranges: string containing the "plot {<ranges>}" portion of a Gnuplot plot command 
@@ -130,6 +130,7 @@ class GnuplotController:
         Gnuplot can't see keypresses so "pause key" can't be used.
         python can't see  gnuplot mouse clicks so "pause mouse" also won't work.
         These work: "pause -1", "pause 0" etc.
+        :param pause_option: "mouse_measure OR Gnuplot pause values -1, 0, 1, 3, etc.
         """
         user_input = ""
         if pause_option == "mouse_measure":

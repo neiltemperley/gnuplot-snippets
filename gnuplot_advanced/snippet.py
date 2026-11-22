@@ -26,8 +26,10 @@ logger.addHandler(console_handler)
 
 # ##############################################################
 def escape_str(s: str) -> str:
-    """Escape underscores for titles.
-    
+    """Escape underscores for Gnuplot titles and labels in "enhanced" terminals.
+
+    When a terminal is "enhanced" underscores signify subscripts.
+    Useful for showing a filename correctly in a title.
     :param s: gnuplot title
     :returns: escaped string
     """
@@ -37,15 +39,16 @@ def escape_str(s: str) -> str:
 def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}) -> str:
     """Convert a dataframe to neat readable columns also suitable for a Gnuplot datablock or datafile.
 
-    Also useful for visual examination of data.
+    Useful for visual examination of data.
     Note: This assumes the column names are shorter than or equal to the field widths provided in format_dict.
           So increase the field widths if necessary.
-    Note: If no format_dict is provided results are formatted according to pandas with better but imperfect
-    alignment of columns to data.
+    Note: If no format_dict is provided numbers are formatted according to pandas with better but imperfect
+    alignment of columns to data; OR If the same format for all columns is acceptable, omit format_dict
+    and try the equivalent of "df = df.map("{:8.2f}".format)" before calling this method.
     :param dataframe: pandas 2D dataframe, e.g. with columns: 'column1', 'column2' etc.
     :param format_dict: {'column1':'fmt1', 'column2':'fmt2', ...} where 'column1' etc matches dataframe
-    column names exactly and 'fmt1' etc is of the python form but without a width specifier,
-    e.g. '.2f', '', 'd'
+    column names exactly and 'fmt1' etc is of the python form,
+    e.g. '8.2f', '', '5d'.  
     :returns: formatted string.
     """
     formatted_df = dataframe.copy()
@@ -71,7 +74,8 @@ def _source(note="", is_snippet=True) -> str:
     """Create a string for logging the snippet's or GnuplotController command's source.
 
     Note: No newline at end.
-    :param note: optional note to append.  Any new lines must begin with the comment char "#"!
+    :param note: optional note to append.  Any new lines in note must begin with the comment char "#"!
+    :param is_snippet: True if called from a GnuplotSnippet method else GnuplotController
     """
     frame = inspect.currentframe().f_back.f_back  # caller's caller. # pyright: ignore
     if frame is not None:
@@ -114,7 +118,7 @@ def _clean_cmds(*set_cmds) -> str:
     lines: list[str] = []
     for cmd in set_cmds:
         if not isinstance(cmd, str):
-            if type(cmd).__name__ == "GnuplotSnippets":
+            if type(cmd).__name__ == "GnuplotSnippet":
                 raise TypeError(
                     f"Expected string, got {type(cmd).__name__}: {cmd!r}.\nPerhaps you sent a snippets object to preplot()? To add a snippet use the snippets' append() method."
                 )
@@ -129,7 +133,7 @@ def _clean_cmds(*set_cmds) -> str:
     return "\n".join(lines) + "\n" if len(lines) > 0 else ""
 
 
-class GnuplotSnippets():
+class GnuplotSnippet():
     """Save gnuplot command snippets to later combine for plotting.
 
     FIXME XXXX

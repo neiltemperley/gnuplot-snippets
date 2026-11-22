@@ -130,7 +130,7 @@ def _clean_cmds(*set_cmds) -> str:
     lines: list[str] = []
     for cmd in set_cmds:
         if not isinstance(cmd, str):
-            if type(cmd).__name__ == "GnuplotSnippets":
+            if type(cmd).__name__ == "GnuplotSnippet":
                 raise TypeError(
                     f"Expected string, got {type(cmd).__name__}: {cmd!r}.\nPerhaps you sent a snippets object to preplot()? To add a snippet use the snippets' append() method."
                 )
@@ -362,7 +362,7 @@ def interaction_demo():
     return
 
 
-class GnuplotSnippets():
+class GnuplotSnippet():
     """Save gnuplot command snippets to later combine for plotting.
 
     FIXME XXXX
@@ -552,7 +552,7 @@ class GnuplotSnippets():
 
         Handles append(snippet), append([s1, s2, ...]), append((s1, s2, ...))
         or append(s1, s2, ...).
-        Useful when adding several GnuplotSnippets from different objects into this one.
+        Useful when adding several GnuplotSnippet from different objects into this one.
         """
         if len(snippets) == 1 and isinstance(snippets[0], (list, tuple)):
             items = snippets[0]  # a list or tuple of snippets was passed
