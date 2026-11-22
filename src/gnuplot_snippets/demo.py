@@ -4,7 +4,7 @@
 # https://github.com/neiltemperley/gnuplot-snippets
 """Demo file for using GnuplotSnippets and GnuplotController
 Note: You must have gnuplot installed on your system as an executable.
-Usage: python -m gnuplot_adanced.demo
+Usage: python -m gnuplot_snippets.demo
 """
 import logging
 import random
