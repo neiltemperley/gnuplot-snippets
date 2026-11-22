@@ -1,3 +1,7 @@
+# Copyright (c) 2025-2026 Neil Temperley
+# SPDX-License-Identifier: MIT
+# See the LICENSE file in the project root for full license text.
+# https://github.com/neiltemperley/gnuplot-advanced
 """Demo file for using GnuplotSnippets and GnuplotController
 Note: You must have gnuplot installed on your system as an executable.
 Usage: python -m gnuplot_adanced.demo

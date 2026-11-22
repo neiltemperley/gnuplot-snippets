@@ -1,7 +1,7 @@
 # Copyright (c) 2025-2026 Neil Temperley
 # SPDX-License-Identifier: MIT
 # See the LICENSE file in the project root for full license text.
-# https://github.com/neiltemperley/gnuplot_advanced
+# https://github.com/neiltemperley/gnuplot-advanced
 """Flexible unrestricted tools for Gnuplot integration with Python."""
 import inspect
 import logging

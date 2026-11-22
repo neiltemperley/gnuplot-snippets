@@ -5,7 +5,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 name = "gnuplot-advanced"
 version = "0.1.0"
-description = "Advanced Gnuplot utilities for Gnuplot power users"
+description = "Composable gnuplot snippets for Python, for interactive and batch plotting by advanced users"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
