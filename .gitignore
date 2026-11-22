@@ -7,13 +7,15 @@
 **/Old
 **/Junk
 /Template*
-**/.venv
-pyproject-pip.ztoml
 zDEMO-*
 zJUNK-*
 
+# Python
+__pycache__/
+**/.venv
+pyproject-pip.ztoml
+
 # Emacs/General
-_*
 #*
 *~
 tags
@@ -41,7 +43,6 @@ GTAGS
 *.prv
 *.toc
 .*.lb
-_*
 *.mtc*
 *.maf
 *.sav
