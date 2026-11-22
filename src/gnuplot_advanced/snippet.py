@@ -318,7 +318,7 @@ class GnuplotSnippet():
          gc.close()
          #
         You can ignore using this method if you are happy with the system screen default.
-        :param set_cmds: "set terminal ..." then any additional Gnuplot command lines specific to screen view.
+        :param set_cmds: "set terminal ...", then any additional Gnuplot command lines specific to screen view.
         :param show_source: If True, prepend a comment with caller of this method's details.
         :returns: Preplot command string to direct output to screen.
         """
@@ -341,7 +341,9 @@ class GnuplotSnippet():
         """Append one or more lines to the preplot snippet to be sent to gnuplot before plotting.
 
         For example, all gnuplot "set" and "unset" commands: title, ranges, labels, arrows etc.
-        :param set_cmds: one or more set/unset commands or datablock definitions
+        To set terminal use output_to_screen() or output_to_file().
+        See also preplot_add_datablock().
+        :param set_cmds: one or more set/unset commands. 
         :param reset: if true clear preplot snippet before appending.  Usually not required.
         :param show_source: bool when True prepend a comment indicating caller details of this method.
         :returns: preplot snippet of all commands
@@ -422,15 +424,6 @@ class GnuplotSnippet():
         snippet_source = f'# {_source()}\n' if show_source else ""
         separator = "\t"  # data separator
         self.__preplot += snippet_source + f'set datafile separator "{separator}"\nset datafile columnheaders\n'
-        # if set_ids:
-        #     # Create a Gnuplot array of dataset ids for possible inclusion in plot titles:
-        #     n = len(set_ids)
-        #     values_str = ", ".join(f'\\"{s}\\"' for s in set_ids)
-        #     array_str = f'array {gnuplot_arrayname}[{n}] = [ {values_str} ]\n'
-        #     self.__preplot += array_str
-        #     if self.is_debug:
-        #         self.__preplot += f'print("GnuplotSnippet DEBUG: Number of datasets = {n} with Set IDs: {array_str}")\n'
-        #
         blocks: list[str] = []
         for df in datasets:
             blocks.append(format_dataframe(df, formatter=formatter))
@@ -446,20 +439,21 @@ class GnuplotSnippet():
         return self.__preplot
 
     def plot_elements(self, *plot_elements, reset: bool = False) -> tuple[str]:
-        """Append one or more plot elements lines to the gnuplot plot string.
+        """Append one or more Gnuplot "plot element" lines to the plot elements snippet.
         
-        Note: from Gnuplot help, a plot command for Gnuplot looks like this:
-           plot {<ranges>} <plot-element> {, <plot-element>, <plot-element>}
-        Accepts either:
+        Recall (from Gnuplot help), that a plot command for Gnuplot looks like this:
+        plot {<ranges>} <plot-element1> {, <plot-element2>, <plot-element3>}
+       
+        Method accepts either:
            - Multiple element strings as arguments: plot_elements(plot_element1, plot_element2)
            - Tuples of plot element strings: plot_elements((plot_element1, plot_element2))
         Usage Example:
          gs = GnuplotSnippet()
-         gs.plot_elements('cos(x)', 'sin(x)')
+         gs.plot_elements('cos(x)', 'sin(x) title "Sin Demo" linewidth 2.0')
          gc = GnuplotController() 
-         gc.preplot(gs.preplot())
-         gc.plot(gs.plot_elements(), pause=-1)
-         gc.postplot(gs.postplot())
+         gc.preplot(gs.preplot())   # send preplot snippets to controller
+         gc.plot(gs.plot_elements(), pause=-1) # send plot element snippets to controller and plot
+         gc.postplot(gs.postplot()) # send postplot cleanup commands to controller
          gc.close()
         :param plot_elements: one or more Gnuplot plot elements
         :param reset: if true clear plot elements before appending.
