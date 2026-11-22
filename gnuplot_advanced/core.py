@@ -3,6 +3,7 @@ import logging
 # import pdb  # python debugger. Useful are: pdb.post_mortem() and import pdb; pdb.set_trace() will launch pdb at this spot.
 import os
 import sys
+import inspect
 import subprocess
 import time
 import copy
@@ -47,40 +48,53 @@ def escape_str(s: str) -> str:
     """
     return s.replace('_', '\\\\_')
 
-def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}) -> str:
+
+def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}, separator: str = "\t") -> str:
     """Convert a dataframe to neat readable columns also suitable for a Gnuplot datablock or datafile.
 
     Also useful for visual examination of data.
-    # Note: This assumes the column names are shorter than or equal to the field widths.
-    # So increase the field widths if necessary.
+    Note: This assumes the column names are shorter than or equal to the field widths provided in format_dict.
+          So increase the field widths if necessary.
+    Note: If no format_dict is provided results are formatted according to pandas with better but imperfect
+    alignment of columns to data.
     :param dataframe: pandas 2D dataframe, e.g. with columns: 'column1', 'column2' etc.
     :param format_dict: {'column1':'fmt1', 'column2':'fmt2', ...} where 'column1' etc matches dataframe
     column names exactly and 'fmt1' etc is of the python form but without a width specifier,
     e.g. '.2f', '', 'd'
-    Note the method will calculate the width specifier for each based on each column name's width.
     :returns: formatted string.
     """
     formatted_df = dataframe.copy()
-    if format_dict:
-        # Calc minimum widths for columns and prepend width specifier to the format strings:
-        # for col, fmt in format_dict.items():
-        #     width = len(col)
-        #     format_dict[col] = str(width) + fmt
-        # Create map:
-        formatted_map = {}
-        # FIXME if no format_dict format using "{}"
-        for col, fmt in format_dict.items():
-            formatted_map[col] = lambda x, format=fmt: f"{x:{format}}"
-        # Convert data to strings:
-        for col, fmt in format_dict.items():
+    # Create map:
+    formatted_map = {}
+    for col, fmt in format_dict.items():
+        formatted_map[col] = lambda x, format=fmt: f"{x:{format}}"
+    # Convert data to formatted strings:
+    for col, val in dataframe.items():
+        if col in formatted_map:  # ignore unknown keys
             formatted_df[col] = dataframe[col].map(formatted_map[col])
-    # Align headings to columns:
+        else:
+            formatted_df[col] = dataframe[col].map(lambda x: f"{x:}")  # default formats of pandas
+    # Format header row to align to columns:
     header = ""
     first_row = formatted_df.iloc[0]
     for col, val in first_row.items():
         header += f"{col:>{len(val)}}\t"
     return header + "\n" + formatted_df.to_csv(header=False, index=False, sep="\t")
-        
+
+
+def _snippet_source(note=""):
+    """Create a string for logging the snippet's source.
+
+    Note: No newline at end.
+    :param note: optional note to append.  Any newlines must be followed by the Gnuplot comment char "#"!
+    """
+    frame = inspect.currentframe().f_back.f_back  # caller's caller.
+    filename = frame.f_code.co_filename
+    lineno = frame.f_lineno
+    funcname = frame.f_code.co_name
+    return f"Snippet source is {filename}, {funcname}(), line {lineno}... {note}"
+
+
 def _flatten_to_tuple_of_strings(*args):
     """Flatten a tuple containing strings and possible nested tuples of strings.
 
@@ -95,10 +109,10 @@ def _flatten_to_tuple_of_strings(*args):
         else:
             yield str(item)
         return
-    
+
     tuple_strs = tuple(_flatten(args))
     # Plot elments cannot be empty! Remove any empty strings:
-    return tuple(s for s in tuple_strs if s) 
+    return tuple(s for s in tuple_strs if s)
 
 
 def _clean_cmds(*set_cmds) -> str:
@@ -172,7 +186,7 @@ class GnuplotController:
             pause = self.pause_override
         plot_elements = _flatten_to_tuple_of_strings(plot_elements)
         # Build the gnuplot plot string:
-        gnuplot_continue_str = ",  \\\n" # extra spaces make nicer Gnuplot error messages
+        gnuplot_continue_str = ",  \\\n"  # extra spaces make nicer Gnuplot error messages
         pcl = plot_and_ranges + " \\\n"
         for plot_line in plot_elements:
             pcl += plot_line.strip() + gnuplot_continue_str
@@ -279,7 +293,8 @@ class GnuplotController:
                     if (exists("MOUSE_BUTTON")) {
                         mx11 = MOUSE_X; my11 = MOUSE_Y; my21 = MOUSE_Y2;
                         print sprintf("\nGnuplot: Mouse button %d at x1, y1, y2 = %.8g, %.8g, %.8g", MOUSE_BUTTON, MOUSE_X, MOUSE_Y, MOUSE_Y2)
-                        set label 901 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
+                        # set label 901 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
+                        set label 901 sprintf("   Point 1!")
                         set label 901 at MOUSE_X, MOUSE_Y
                         set label 901 point pt 6 ps 3
                         replot
@@ -290,7 +305,8 @@ class GnuplotController:
                     if (exists("MOUSE_BUTTON")) {
                         mx12 = MOUSE_X; my12 = MOUSE_Y; my22 = MOUSE_Y2;
                         print sprintf("\nGnuplot: Mouse button %d at x1, y1, y2 = %.8g, %.8g, %.8g", MOUSE_BUTTON, MOUSE_X, MOUSE_Y, MOUSE_Y2)
-                        set label 902 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
+                        # set label 902 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
+                        set label 902 sprintf("   Point 2!")
                         set label 902 at MOUSE_X, MOUSE_Y
                         set label 902 point pt 6 ps 3
                         replot
@@ -344,68 +360,36 @@ class GnuplotSnippets():
      this_object.postplot_cmds()
     """
 
-    def __init__(self) -> None:
-        """Initialise all snippets to empty."""
+    def __init__(self, comment: str = "") -> None:
+        """Initialise all snippets to empty.
+
+        :param comment: Use this to indicate the python source class or method.
+        Note: If its multiline each line must begin with Gnuplot comment char "# ".
+        """
         # These are gnuplot command snippets
         self.__terminal: str = ""  # set terminal and terminal-related commands
-        self.__preplot: str = ""  # set and unset commands to process before plotting
+        self.__preplot: str = f'# {comment}\n' if comment else ""  # set and unset commands to process before plotting
         self.__plot_elements: tuple = ()  # plot elements for the next plot command in a more convenient form for altering.
         self.__postplot: str = ""  # set and unset commands to process after plotting
         return
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         """Create object string for printing/debugging."""
         s: str = ''
-        s += '### preplot       \t= \n"{}"\n'.format(self.__preplot)
-        s += '### plot_elements \t= \n"{}"\n'.format(self.__plot_elements)
-        s += '### postplot      \t= \n"{}"\n'.format(self.__postplot)
+        s += '### preplot       \t= \n{}\n'.format(self.__preplot)
+        s += '### plot_elements \t= \n{}\n'.format(self.__plot_elements)
+        s += '### postplot      \t= \n{}\n'.format(self.__postplot)
         # s += ' = """{}"""\n'.format()
         return s
 
-    def show_all_cmds(self, gnuplot_plot_type: str = "plot"):
-        """You can cut and paste this output to a manual gnuplot session for testing."""
-        s: str = ''
-        s += self.preplot()
-        s += f"{self.plot_elements()}"
-        s += self.postplot()
-        return s
-
-    # def _clean_cmds(self, *set_cmds, is_keep_format_spaces: bool = True) -> str:
-    #     """Cleans one or more lines to the gnuplot command string.
-
-    #     :param is_keep_format_spaces: keeps LHS whitespace to preserved formatting. Helps visually when printing many commands when debugging.
-    #     :returns: cleaned up command string
-    #     """
-    #     clean_set_cmds: str = ""
-    #     # Ignore empty lines
-    #     for cmd in set_cmds:
-    #         cmds = StringIO(cmd).readlines()  # type: ignore # mypy ignores this!
-    #         for c in cmds:
-    #             if is_keep_format_spaces:
-    #                 clean_set_cmds += c.rstrip() + "\n"
-    #             else:
-    #                 clean_set_cmds += c.strip() + "\n"
-    #     return clean_set_cmds
-
-    # def preplot_miscellaneous(self, *preplot_cmds) -> str:
-    #     """Append one or more lines to the gnuplot pre plot command string that you'll send to gnuplot before plotting.
-    #     e.g. gnuplot function definitions and datablocks.
-
-    #     :param preplot_cmds: one or more lines for the plot command
-    #     :param is_keep_format_spaces: bool makes it easier to read strings when debugging.
-    #     :returns: preplot_miscellaneous string
-
-    #     """
-    #     self.__preplot_miscellaneous_OLD += _clean_cmds(*preplot_cmds)
-    #     return self.__preplot_miscellaneous
-
-    def set_terminal_and_output(self, *set_cmds) -> str:
+    def set_terminal_and_output(self, *set_cmds, show_source: bool = True) -> str:
         """Append set terminal and output commands to the preplot snippet.
 
         Sets termimal with some safety.
         Note: You may want to include set xlabel and xformat here based on your terminal choice.
         Usage: gs.set_terminal_and_output('set terminal qt size 1400,700 position 300,150 title "{}"'.format("Window Title")
         :param set_cmds: one or more commands relating to set terminal.
+        :param show_source: bool when True prepend a comment indicating caller details of this method.
         :returns: pre plot command string
         """
         # Add some internal gnuplot protection against multiple terminals.
@@ -418,22 +402,26 @@ class GnuplotSnippets():
         #     '}')
         # if not title == "":
         #     set_cmd += f' title "{title}"'  # append title
+        snippet_source = f'# {_snippet_source()}' if set_cmds and show_source else ""
         return self.preplot(
+            snippet_source,
             'output = ""\n',  # take some precautions
             _clean_cmds(*set_cmds),  # set terminal and output
-        )
+            show_source=False)
 
-    def preplot(self, *set_cmds, reset: bool = False) -> str:
+    def preplot(self, *set_cmds, reset: bool = False, show_source: bool = True) -> str:
         """Append one or more lines to the preplot snippet to be sent to gnuplot before plotting.
 
         For example, all gnuplot "set" and "unset" commands: title, ranges, labels, arrows etc.
         :param set_cmds: one or more set/unset commands or datablock definitions
         :param reset: if true clear preplot snippet before appending.  Usually not required.
+        :param show_source: bool when True prepend a comment indicating caller details of this method.
         :returns: preplot snippet of all commands
         """
+        snippet_source = f'# {_snippet_source()}\n' if set_cmds and show_source else ""
         if reset:
             self.__preplot = ""  # clear
-        self.__preplot += _clean_cmds(*set_cmds)
+        self.__preplot += snippet_source + _clean_cmds(*set_cmds)
         return self.__preplot
 
     def add_datablock_to_preplot(self, dataframe: pd.DataFrame, datablock_name: str = "$DataBlock1") -> str:
@@ -447,11 +435,39 @@ class GnuplotSnippets():
 
         :returns: preplot snippet
         """
+        show_source = True
+        warning_str = "# DEPRECATED GNUPLOT SNIPPETS METHOD!  Use preplot_add_datablock().\n"
+        snippet_source = f'# {_snippet_source()}\n' if show_source else ""
         separator = "\t"  # data separator
-        self.__preplot += f'set datafile separator "{separator}"\n'
+        self.__preplot += warning_str + snippet_source + f'set datafile separator "{separator}"\n'
         content = dataframe.to_csv(header=True, index=False, sep=f"{separator}")  # no extra index column!
         self.__preplot += f'{datablock_name} << EOD\n# {content}EOD\n'  # Note: '#' is to comment out the column header
         # self.__preplot += f'DataBlock{id} = "{datablock_name}"\n'
+        return self.__preplot
+
+    def preplot_add_datablock(self,
+                              dataframe: pd.DataFrame,
+                              datablock_name: str = "$DataBlock1",
+                              format_dict: dict[str, str] = {},
+                              show_source: bool = True) -> str:
+        """Convert a pandas dataframe to a datablock and append it to the preplot snippet.
+
+        For more sophisticated plots, e.g. with contours, you'll need to write your data a gnuplot-compatible
+        formatted file and use the filename in the plot element.
+        :param dataframe: pandas DataFrame
+        :param datablock_name: str unique valid gnuplot datablock name.  Default is "$DataBlock1".  Use this same name
+            when creating the plot_elements()!
+        :param format_dict: {} used to optionally format the block to be more human readable.
+        :param show_source: bool when True prepend a comment indicating caller details of this method.
+
+        :returns: preplot snippet
+        """
+        snippet_source = f'# {_snippet_source()}\n' if show_source else ""
+        separator = "\t"  # data separator
+        self.__preplot += f'set datafile separator "{separator}"\n'
+        content = format_dataframe(dataframe, format_dict=format_dict, separator=separator)
+        # content = dataframe.to_csv(header=True, index=False, sep=f"{separator}")  # no extra index column!
+        self.__preplot += f'{datablock_name} << EOD\n# {content}EOD\n'  # Note: '#' is to comment out the column header
         return self.__preplot
 
     def plot_elements(self, *plot_elements, reset: bool = False) -> tuple[str]:
@@ -488,7 +504,7 @@ class GnuplotSnippets():
     #     self.__plot_elements += _flatten_to_tuple_of_strings(plot_elements)
     #     return self.__plot_elements
 
-    def postplot(self, *post_plot_cmds, defaults: bool = False, reset: bool = False) -> str:
+    def postplot(self, *post_plot_cmds, defaults: bool = False, reset: bool = False, show_source: bool = True) -> str:
         """Append one or more post_plot_cmds to the postplot snippet to be sent to gnuplot after plotting.
         
         Usually "unset" commands: labels, arrows, multiplot etc.
@@ -496,14 +512,16 @@ class GnuplotSnippets():
         :param post_plot_cmds: one or more commands to send after plotting.
         :param defaults: = True to use fairly safe typical commands.
         :param reset: if true clear postplot snippet before appending.  Usually not required.
+        :param show_source: bool when True prepend a comment indicating caller details of this method.
         :returns: post plot command string
         """
+        snippet_source = f'# {_snippet_source()}\n' if (set_cmds or defaults) and show_source else ""
         if reset:
             self.__postplot = ""  # clear
         default_cmds = ""
         if defaults:
             default_cmds = 'unset label; unset arrow; unset multiplot; output = ""\n'
-        self.__postplot += default_cmds + _clean_cmds(*post_plot_cmds)
+        self.__postplot += snippet_source + default_cmds + _clean_cmds(*post_plot_cmds)
         return self.__postplot
 
 
