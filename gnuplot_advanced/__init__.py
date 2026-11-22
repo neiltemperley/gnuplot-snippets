@@ -2,9 +2,10 @@
 
 __version__ = "0.1.0"
 
-# This line defines what in core.py that is available to the public user
+# This line defines what is available to the public user
 # User can then do "from gnuplot_advanced import GnuplotController, GnuplotSnippets"
-from .core import GnuplotController, GnuplotSnippets, escape_str, interaction_demo, format_dataframe
+from .snippet import GnuplotSnippets, escape_str, format_dataframe
+from .controller import GnuplotController
 
 # __all__ signals to IDEs and static tools what is available to the public.
-__all__ = ["GnuplotController", "GnuplotSnippets", "escape_str", "interaction_demo", "format_dataframe"] #"run_script"] # , "generate_temp_script"]
+__all__ = ["GnuplotController", "GnuplotSnippets", "escape_str", "format_dataframe"]  #"run_script"] # , "generate_temp_script"]

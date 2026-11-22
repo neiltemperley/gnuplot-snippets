@@ -35,7 +35,9 @@ rescripting per plot.
 - Native-feeling plot window interaction (as if running Gnuplot directly).
 - Interactive gradient and coordinate measurement via mouse.
 - Batch-mode rendering for publication workflows.
-- Logging and optional script dumping for debug and inspection.
+- Logging and optional Gnuplot stand-alone script dumping for debug and inspection.
+- Python source markers in logs and stand-alone scripts.
+- Neat human-readable formatting of Gnuplot datablocks and datafiles.
 
 
 <!-- - Unrestricted access to gnuplot functionality for complicated plots. -->
@@ -52,19 +54,30 @@ rescripting per plot.
 Gnuplot, focused on organizing and reusing Gnuplot script components
 across complex visualizations.
 
-Creating one-off plots from Python is easy — but managing large,
-layered plots with data from multiple classes is not. And Python
-scripts often lack the same interactive behavior that comes from
-launching a Gnuplot session directly.
+Creating one-off plots from Python using existing Gnuplot packages is
+easy — but managing large, layered plots with data originating from
+multiple classes is not. And Python packages often lack the same
+interactive behavior that comes from launching a Gnuplot session
+directly.
 
-This module addresses both:
+Conversely managing a large number of interactive and publication
+plots solely using Gnuplot script files results in large complex files
+difficult to naviage and manage.
+
+This module addresses both issues:
 
 - Organizing reusable Gnuplot script fragments
 - Re-enabling interactive plotting behaviors from Python
 - Introducing new interactive features (like mouse measurements)
 
+The fundamental principle of snippets as implemented here is that each
+object class should generate Gnuplot scripts (snippets) to plot
+itself.  To plot multiple objects on the same graph, or to create a
+multiplot graph, those snippets are simply combined with a minimum of
+additional Gnuplot commands.
+
 > ⚠️ This package is *not intended for Gnuplot beginners*. It assumes
-> comfort with Gnuplot syntax and behavior. Rather attempting a
+> comfort with Gnuplot syntax and behavior. Rather than attempting a
 > simplified interface to Gnuplot, it empowers experienced users to
 > take full advantage of it from within Python.
 

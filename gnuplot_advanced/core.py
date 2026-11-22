@@ -1,14 +1,15 @@
 """Flexible unrestricted tools for Gnuplot integration with Python."""
 import logging
 # import pdb  # python debugger. Useful are: pdb.post_mortem() and import pdb; pdb.set_trace() will launch pdb at this spot.
-import os
-import sys
+# import os
+# import sys
 import inspect
 import subprocess
 import time
-import copy
+# import copy
 import re
 from datetime import datetime
+# from numpy import iterable
 import pandas as pd
 # from pprint import pformat, pprint
 # from typing import (
@@ -49,7 +50,7 @@ def escape_str(s: str) -> str:
     return s.replace('_', '\\\\_')
 
 
-def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}, separator: str = "\t") -> str:
+def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}) -> str:
     """Convert a dataframe to neat readable columns also suitable for a Gnuplot datablock or datafile.
 
     Also useful for visual examination of data.
@@ -70,7 +71,7 @@ def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}, 
         formatted_map[col] = lambda x, format=fmt: f"{x:{format}}"
     # Convert data to formatted strings:
     for col, val in dataframe.items():
-        if col in formatted_map:  # ignore unknown keys
+        if col in formatted_map:  #... ignore unknown keys
             formatted_df[col] = dataframe[col].map(formatted_map[col])
         else:
             formatted_df[col] = dataframe[col].map(lambda x: f"{x:}")  # default formats of pandas
@@ -82,17 +83,20 @@ def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}, 
     return header + "\n" + formatted_df.to_csv(header=False, index=False, sep="\t")
 
 
-def _snippet_source(note=""):
-    """Create a string for logging the snippet's source.
+def _source(note="", is_snippet=True) -> str:
+    """Create a string for logging the snippet's or GnuplotController command's source.
 
     Note: No newline at end.
-    :param note: optional note to append.  Any newlines must be followed by the Gnuplot comment char "#"!
+    :param note: optional note to append.  Any new lines must begin with the comment char "#"!
     """
     frame = inspect.currentframe().f_back.f_back  # caller's caller.
-    filename = frame.f_code.co_filename
-    lineno = frame.f_lineno
-    funcname = frame.f_code.co_name
-    return f"Snippet source is {filename}, {funcname}(), line {lineno}... {note}"
+    if frame is not None:
+        filename = frame.f_code.co_filename
+        lineno = frame.f_lineno
+        funcname = frame.f_code.co_name
+        source_type: str = "Snippet" if is_snippet else "GnuplotController command"
+        return source_type + f" source is {filename}, {funcname}(), line {lineno}... {note}"
+    return f"Souce unknown. {note}"
 
 
 def _flatten_to_tuple_of_strings(*args):
@@ -111,7 +115,7 @@ def _flatten_to_tuple_of_strings(*args):
         return
 
     tuple_strs = tuple(_flatten(args))
-    # Plot elments cannot be empty! Remove any empty strings:
+    # Plot elments cannot have an empty string! Remove any empty strings:
     return tuple(s for s in tuple_strs if s)
 
 
@@ -120,19 +124,30 @@ def _clean_cmds(*set_cmds) -> str:
 
     Attempts to comment out any "pause XXX" gnuplot commands of user because
     the GnuplotController will handle the pause workflow.
+    :raises TypeError: if any argument is not a string
     :returns: cleaned up command string
     """
-    clean_set_cmds: str = ""
+    lines: list[str] = []
     for cmd in set_cmds:
-        # print(f"cmd = {cmd}")
-        # print(f"cmd = {cmd.splitlines()}")
+        if not isinstance(cmd, str):
+            if type(cmd).__name__ == "GnuplotSnippets":
+                raise TypeError(
+                    f"Expected string, got {type(cmd).__name__}: {cmd!r}.\nPerhaps you sent a snippets object to preplot()? To add a snippet use the snippets' append() method."
+                )
+            else:
+                raise TypeError(f"Expected a string; got {type(cmd).__name__}: {cmd!r}.")
         for line in cmd.splitlines():
             # logger.debug("line     \t= \"{}\"".format(line))
             # Replace 'pause -1', 'pause mouse' with '# pause 0' etc.
             new_line = re.sub(r'\bpause\s+(-?\d+|mouse)([^;\n]*)[;]*', r'# pause \1\2\n', line)
             # logger.debug("new_line \t= \"{}\"".format(new_line))
-            clean_set_cmds += new_line.rstrip() + "\n"
-    return clean_set_cmds
+            lines.append(new_line.rstrip())
+    return "\n".join(lines) + "\n" if len(lines) > 0 else ""
+
+
+class GnuplotError(Exception):
+    """Base class for exceptions in the Gnuplot plotting library."""
+    pass
 
 
 class GnuplotController:
@@ -156,21 +171,25 @@ class GnuplotController:
         self.is_debug: bool = debug
         self.script_filename = script_filename
 
-    def cmd(self, gnuplot_str: str):
+    def cmd(self, gnuplot_str: str, show_source=False):
         """Send the gnuplot command str without checks."""
-        self.script += gnuplot_str
-        self.gnuplot.stdin.write(gnuplot_str)
-        self.gnuplot.stdin.flush()
+        cmd_source: str = f'# {_source(is_snippet=False)}\n' if show_source else ""
+        self.script += cmd_source + gnuplot_str.rstrip() + "\n"  # ensure a newline termination
+        if self.gnuplot.stdin is not None:
+            self.gnuplot.stdin.write(gnuplot_str)
+            self.gnuplot.stdin.flush()
 
-    def preplot(self, *cmds: str):
+    def preplot(self, *cmds: str, show_source=False):
         """Send setup commands."""
-        self.cmd(_clean_cmds(*cmds))
+        cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
+        self.cmd(_clean_cmds(cmd_source, *cmds))
 
-    def postplot(self, *cmds: str):
+    def postplot(self, *cmds: str, show_source=False):
         """Send tidy up commands."""
-        self.cmd(_clean_cmds(*cmds))
+        cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
+        self.cmd(_clean_cmds(cmd_source, *cmds))
 
-    def plot(self, *plot_elements: str, pause=0, plot_and_ranges: str = "plot"):
+    def plot(self, *plot_elements, pause: int | str = 0, plot_and_ranges: str = "plot", show_source=False):
         """Build and send the plot command and pause option to Gnuplot.
 
         Showing the plot maintains synchronisation between the gnuplot plot window
@@ -178,24 +197,27 @@ class GnuplotController:
         Note: from Gnuplot help, a plot command for Gnuplot looks like this:
           plot {<ranges>} <plot-element> {, <plot-element>, <plot-element>}
         :param plot_elements: Gnuplot "<plot-element> {, <plot-element>, <plot-element>}" 
-        :param plot_and_ranges: string containing "plot {<ranges>}" portion of command 
+        :param plot_and_ranges: string containing the "plot {<ranges>}" portion of a Gnuplot plot command 
         :param pause: = "mouse_measure" OR similar to gnuplot pause = -1, 0, N seconds
         """
+        if len(plot_elements) == 0:
+            raise GnuplotError("Plot elements cannot be empty!")
+        cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
         # logger.debug("*plot_elements \t= \"{}\"".format(*plot_elements))
         if self.pause_override is not None:
             pause = self.pause_override
         plot_elements = _flatten_to_tuple_of_strings(plot_elements)
         # Build the gnuplot plot string:
         gnuplot_continue_str = ",  \\\n"  # extra spaces make nicer Gnuplot error messages
-        pcl = plot_and_ranges + " \\\n"
-        for plot_line in plot_elements:
-            pcl += plot_line.strip() + gnuplot_continue_str
-        pcl = pcl.rstrip(gnuplot_continue_str) + "\n"
+        plot_cmd: str = plot_and_ranges + " \\\n"
+        for pe in plot_elements:
+            plot_cmd += pe.strip() + gnuplot_continue_str
+        plot_cmd = cmd_source + plot_cmd.rstrip(gnuplot_continue_str) + "\n"
 
         if isinstance(pause, int):
-            self.cmd(_clean_cmds(pcl).rstrip() + f"\npause {pause}\n")
+            self.cmd(_clean_cmds(plot_cmd).rstrip() + f"\npause {pause}\n")
         else:
-            self.cmd(_clean_cmds(pcl))
+            self.cmd(_clean_cmds(plot_cmd))
         if pause:
             # Optionally override original scripted plot workflow:
             user_input = self._wait_for_user(pause).strip().lower()
@@ -240,8 +262,9 @@ class GnuplotController:
         elif isinstance(pause_option, int):
             if pause_option < 0:
                 user_input = input("Python: Press Enter to continue (or 'q' to quit):...\n")
-                self.gnuplot.stdin.write("\n")  # gnuplot needs a char!
-                self.gnuplot.stdin.flush()
+                if self.gnuplot.stdin is not None:
+                    self.gnuplot.stdin.write("\n")  # gnuplot needs a char!
+                    self.gnuplot.stdin.flush()
             else:
                 print(f"Python: Pausing for {pause_option} seconds...")
                 time.sleep(pause_option)  # Wait for a specified number of seconds
@@ -251,6 +274,7 @@ class GnuplotController:
 
     def close(self):
         """Close the gnuplot window and end the session."""
+        # Note: Gnuplot exits on error!
         if self.is_debug:
             print("# GNUPLOT LOG SCRIPT FOR DEBUGGING:")
             print(self.script)
@@ -259,15 +283,12 @@ class GnuplotController:
             # print(f"Writing script to \"{os.path.abspath(self.script_filename)}\".")
             with open(self.script_filename, "w") as f:
                 f.write(self.script)
-        # Gnuplot exits on error!
-        # if self.gnuplot.poll() is None:  # None means the process is still running
-        """Properly close Gnuplot."""
         try:
-            self.gnuplot.stdin.write("exit\n")  # Terminate gnuplot gracefully
-            self.gnuplot.stdin.flush()
-            self.gnuplot.stdin.close()
-            #self.gnuplot.wait()
-            #self.gnuplot.terminate()
+            if self.gnuplot.stdin is not None:
+                self.gnuplot.stdin.write("exit\n")  # End Gnuplot gracefully
+                self.gnuplot.stdin.flush()
+                self.gnuplot.stdin.close()
+            # if self.gnuplot.poll() is None:  # None means the process is still running
         except Exception as e:
             print(f"Error closing gnuplot: {e}")
 
@@ -367,7 +388,7 @@ class GnuplotSnippets():
         Note: If its multiline each line must begin with Gnuplot comment char "# ".
         """
         # These are gnuplot command snippets
-        self.__terminal: str = ""  # set terminal and terminal-related commands
+        # self.__terminal: str = ""  # set terminal and terminal-related commands
         self.__preplot: str = f'# {comment}\n' if comment else ""  # set and unset commands to process before plotting
         self.__plot_elements: tuple = ()  # plot elements for the next plot command in a more convenient form for altering.
         self.__postplot: str = ""  # set and unset commands to process after plotting
@@ -386,6 +407,8 @@ class GnuplotSnippets():
         """Append set terminal and output commands to the preplot snippet.
 
         Sets termimal with some safety.
+        Note: You can't change the terminal in multiplot mode. So we must protect against
+        multiple set terminal's from different sources.
         Note: You may want to include set xlabel and xformat here based on your terminal choice.
         Usage: gs.set_terminal_and_output('set terminal qt size 1400,700 position 300,150 title "{}"'.format("Window Title")
         :param set_cmds: one or more commands relating to set terminal.
@@ -402,7 +425,7 @@ class GnuplotSnippets():
         #     '}')
         # if not title == "":
         #     set_cmd += f' title "{title}"'  # append title
-        snippet_source = f'# {_snippet_source()}' if set_cmds and show_source else ""
+        snippet_source = f'# {_source()}' if set_cmds and show_source else ""
         return self.preplot(
             snippet_source,
             'output = ""\n',  # take some precautions
@@ -418,7 +441,7 @@ class GnuplotSnippets():
         :param show_source: bool when True prepend a comment indicating caller details of this method.
         :returns: preplot snippet of all commands
         """
-        snippet_source = f'# {_snippet_source()}\n' if set_cmds and show_source else ""
+        snippet_source = f'# {_source()}\n' if set_cmds and show_source else ""
         if reset:
             self.__preplot = ""  # clear
         self.__preplot += snippet_source + _clean_cmds(*set_cmds)
@@ -437,7 +460,7 @@ class GnuplotSnippets():
         """
         show_source = True
         warning_str = "# DEPRECATED GNUPLOT SNIPPETS METHOD!  Use preplot_add_datablock().\n"
-        snippet_source = f'# {_snippet_source()}\n' if show_source else ""
+        snippet_source = f'# {_source()}\n' if show_source else ""
         separator = "\t"  # data separator
         self.__preplot += warning_str + snippet_source + f'set datafile separator "{separator}"\n'
         content = dataframe.to_csv(header=True, index=False, sep=f"{separator}")  # no extra index column!
@@ -462,10 +485,10 @@ class GnuplotSnippets():
 
         :returns: preplot snippet
         """
-        snippet_source = f'# {_snippet_source()}\n' if show_source else ""
+        snippet_source = f'# {_source()}\n' if show_source else ""
         separator = "\t"  # data separator
-        self.__preplot += f'set datafile separator "{separator}"\n'
-        content = format_dataframe(dataframe, format_dict=format_dict, separator=separator)
+        self.__preplot += snippet_source + f'set datafile separator "{separator}"\n'
+        content = format_dataframe(dataframe, format_dict=format_dict)
         # content = dataframe.to_csv(header=True, index=False, sep=f"{separator}")  # no extra index column!
         self.__preplot += f'{datablock_name} << EOD\n# {content}EOD\n'  # Note: '#' is to comment out the column header
         return self.__preplot
@@ -515,14 +538,31 @@ class GnuplotSnippets():
         :param show_source: bool when True prepend a comment indicating caller details of this method.
         :returns: post plot command string
         """
-        snippet_source = f'# {_snippet_source()}\n' if (set_cmds or defaults) and show_source else ""
+        snippet_source = f'# {_source()}\n' if (post_plot_cmds or defaults) and show_source else ""
         if reset:
             self.__postplot = ""  # clear
         default_cmds = ""
         if defaults:
-            default_cmds = 'unset label; unset arrow; unset multiplot; output = ""\n'
+            default_cmds = 'unset label; unset arrow; unset multiplot; set output\n'
         self.__postplot += snippet_source + default_cmds + _clean_cmds(*post_plot_cmds)
         return self.__postplot
+
+    def append(self, *snippets):
+        """Append a list, tuple or single snippet onto self.
+
+        Handles append(snippet), append([s1, s2, ...]), append((s1, s2, ...))
+        or append(s1, s2, ...).
+        Useful when adding several GnuplotSnippets from different objects into this one.
+        """
+        if len(snippets) == 1 and isinstance(snippets[0], (list, tuple)):
+            items = snippets[0]  # a list or tuple of snippets was passed
+        else:
+            items = snippets  # multiple arguments or a single snippet
+        for sn in items:
+            self.preplot(sn.preplot(), show_source=False)
+            self.plot_elements(sn.plot_elements())
+            self.postplot(sn.postplot(), show_source=False)
+        return self
 
 
 #    interaction_demo()
