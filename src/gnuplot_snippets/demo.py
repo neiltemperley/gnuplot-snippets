@@ -217,7 +217,7 @@ def main() -> None:
     #
     print("==============================================================")
     print("Demo: Demo of raw interface to Gnuplot along with mouse_measure:")
-    title = "Plot without snippets using the controller only.\\nPress \\\"m\\\" to try the mouse_measure functionality."
+    title = "Plot without snippets using the controller only.\\nPress \\\"m\\\" to try the mouse\\\\_measure functionality."
 
     # Note: Generally args can be one long Gnuplot script string OR one line per arg OR a mix:
     gc.preplot(
