@@ -20,6 +20,10 @@ dependencies = [
 [project.scripts]
 gnuplot-snippets-demo = "gnuplot_snippets.demo:main"
 
+[project.urls]
+Repository = "https://github.com/neiltemperley/gnuplot-snippets"
+Licence = "https://github.com/neiltemperley/gnuplot-snippets/blob/main/LICENSE"
+
 [tool.poetry]
 packages = [{ include = "gnuplot_snippets", from = "src" }]
 
