@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "gnuplot_advanced"
-version = "0.1.0"
+name = "gnuplot-advanced"
+version = "0.1.1"
 description = "Advanced Gnuplot utilities for Gnuplot power users"
 authors = ["Neil Temperley"]
 license = "MIT"
@@ -9,6 +9,8 @@ packages = [{ include = "gnuplot_advanced" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+# NOTE: Put this in the consuming project toml gnuplot-advanced = {path = "../Gnuplot_Advanced", develop = true}
+# and/or run from consumer poetry shell for example: poetry add --editable ../Gnuplot_Advanced
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.0"  # Optional for testing

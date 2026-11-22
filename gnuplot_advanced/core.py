@@ -1,13 +1,14 @@
-"""Flexible unrestricted gnuplot enabler."""
-# import functools  # for nctdebug decorator
+"""Flexible unrestricted tools for Gnuplot integration with Python."""
 import logging
 # import pdb  # python debugger. Useful are: pdb.post_mortem() and import pdb; pdb.set_trace() will launch pdb at this spot.
 import os
 import sys
 import subprocess
 import time
+import copy
 import re
 from datetime import datetime
+import pandas as pd
 # from pprint import pformat, pprint
 # from typing import (
 #     Any,  # TYPE_CHECKING, Dict, List, Tuple  #, Any, Dict, Tuple  # , Optional  # https://mypy.readthedo
@@ -46,16 +47,69 @@ def escape_str(s: str) -> str:
     """
     return s.replace('_', '\\\\_')
 
+def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}) -> str:
+    """Convert a dataframe to neat readable columns also suitable for a Gnuplot datablock or datafile.
 
-def _clean_cmds(*setup_cmds) -> str:
+    Also useful for visual examination of data.
+    # Note: This assumes the column names are shorter than or equal to the field widths.
+    # So increase the field widths if necessary.
+    :param dataframe: pandas 2D dataframe, e.g. with columns: 'column1', 'column2' etc.
+    :param format_dict: {'column1':'fmt1', 'column2':'fmt2', ...} where 'column1' etc matches dataframe
+    column names exactly and 'fmt1' etc is of the python form but without a width specifier,
+    e.g. '.2f', '', 'd'
+    Note the method will calculate the width specifier for each based on each column name's width.
+    :returns: formatted string.
+    """
+    formatted_df = dataframe.copy()
+    if format_dict:
+        # Calc minimum widths for columns and prepend width specifier to the format strings:
+        # for col, fmt in format_dict.items():
+        #     width = len(col)
+        #     format_dict[col] = str(width) + fmt
+        # Create map:
+        formatted_map = {}
+        # FIXME if no format_dict format using "{}"
+        for col, fmt in format_dict.items():
+            formatted_map[col] = lambda x, format=fmt: f"{x:{format}}"
+        # Convert data to strings:
+        for col, fmt in format_dict.items():
+            formatted_df[col] = dataframe[col].map(formatted_map[col])
+    # Align headings to columns:
+    header = ""
+    first_row = formatted_df.iloc[0]
+    for col, val in first_row.items():
+        header += f"{col:>{len(val)}}\t"
+    return header + "\n" + formatted_df.to_csv(header=False, index=False, sep="\t")
+        
+def _flatten_to_tuple_of_strings(*args):
+    """Flatten a tuple containing strings and possible nested tuples of strings.
+
+    :returns: tuple of strings
+    """
+
+    def _flatten(item):
+        """Recursive flatten."""
+        if isinstance(item, (list, tuple)):
+            for sub in item:
+                yield from _flatten(sub)
+        else:
+            yield str(item)
+        return
+    
+    tuple_strs = tuple(_flatten(args))
+    # Plot elments cannot be empty! Remove any empty strings:
+    return tuple(s for s in tuple_strs if s) 
+
+
+def _clean_cmds(*set_cmds) -> str:
     """Clean and add one or more lines to the gnuplot command string.
 
     Attempts to comment out any "pause XXX" gnuplot commands of user because
-    the GnuplotController will handle the pausing workflow.
+    the GnuplotController will handle the pause workflow.
     :returns: cleaned up command string
     """
-    clean_setup_cmds: str = ""
-    for cmd in setup_cmds:
+    clean_set_cmds: str = ""
+    for cmd in set_cmds:
         # print(f"cmd = {cmd}")
         # print(f"cmd = {cmd.splitlines()}")
         for line in cmd.splitlines():
@@ -63,14 +117,15 @@ def _clean_cmds(*setup_cmds) -> str:
             # Replace 'pause -1', 'pause mouse' with '# pause 0' etc.
             new_line = re.sub(r'\bpause\s+(-?\d+|mouse)([^;\n]*)[;]*', r'# pause \1\2\n', line)
             # logger.debug("new_line \t= \"{}\"".format(new_line))
-            clean_setup_cmds += new_line.rstrip() + "\n"
-    return clean_setup_cmds
+            clean_set_cmds += new_line.rstrip() + "\n"
+    return clean_set_cmds
 
 
 class GnuplotController:
     """Control creation and display of gnuplot plots."""
 
     def __init__(self, debug: bool = False, script_filename: str = ""):
+        """Open Gnuplot as a subprocess."""
         # Start gnuplot process
         self.gnuplot = subprocess.Popen(
             ['gnuplot'],  # don't want -persistent switch!
@@ -80,13 +135,14 @@ class GnuplotController:
             #text=True,
             universal_newlines=True)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.pause_override = None  # if set to integer overrides pause value
         # Command script:
         self.script = f"# Gnuplot script for debugging or running \"gnuplot script_filename\" in a terminal.\n"
         self.script += f"# Created on {timestamp}\n"
         self.is_debug: bool = debug
         self.script_filename = script_filename
 
-    def _cmd(self, gnuplot_str: str):
+    def cmd(self, gnuplot_str: str):
         """Send the gnuplot command str without checks."""
         self.script += gnuplot_str
         self.gnuplot.stdin.write(gnuplot_str)
@@ -94,33 +150,60 @@ class GnuplotController:
 
     def preplot(self, *cmds: str):
         """Send setup commands."""
-        self._cmd(_clean_cmds(*cmds))
-        # Capture and print the output from stdout and stderr
-        #self._capture_output()
+        self.cmd(_clean_cmds(*cmds))
 
     def postplot(self, *cmds: str):
         """Send tidy up commands."""
-        self._cmd(_clean_cmds(*cmds))
-        # Capture and print the output from stdout and stderr
-        # self._capture_output()
+        self.cmd(_clean_cmds(*cmds))
 
-    def plot(self, plot_str: str, pause=0):
-        """Send the plot command and pause option to Gnuplot.
+    def plot(self, *plot_elements: str, pause=0, plot_and_ranges: str = "plot"):
+        """Build and send the plot command and pause option to Gnuplot.
 
-        This maintains synchronisation between the gnuplot plot window
-        and the python terminal.
-        :param plot_str: well formed gnuplot plot string
+        Showing the plot maintains synchronisation between the gnuplot plot window
+        and the python terminal during manual interaction.
+        Note: from Gnuplot help, a plot command for Gnuplot looks like this:
+          plot {<ranges>} <plot-element> {, <plot-element>, <plot-element>}
+        :param plot_elements: Gnuplot "<plot-element> {, <plot-element>, <plot-element>}" 
+        :param plot_and_ranges: string containing "plot {<ranges>}" portion of command 
         :param pause: = "mouse_measure" OR similar to gnuplot pause = -1, 0, N seconds
         """
+        # logger.debug("*plot_elements \t= \"{}\"".format(*plot_elements))
+        if self.pause_override is not None:
+            pause = self.pause_override
+        plot_elements = _flatten_to_tuple_of_strings(plot_elements)
+        # Build the gnuplot plot string:
+        gnuplot_continue_str = ",  \\\n" # extra spaces make nicer Gnuplot error messages
+        pcl = plot_and_ranges + " \\\n"
+        for plot_line in plot_elements:
+            pcl += plot_line.strip() + gnuplot_continue_str
+        pcl = pcl.rstrip(gnuplot_continue_str) + "\n"
+
         if isinstance(pause, int):
-            self._cmd(_clean_cmds(plot_str).rstrip() + f"\npause {pause}\n")
+            self.cmd(_clean_cmds(pcl).rstrip() + f"\npause {pause}\n")
         else:
-            self._cmd(_clean_cmds(plot_str))
-        # Capture and print the output from stdout and stderr
-        # self._capture_output()
-        # Wait for the user depending on the pause option
+            self.cmd(_clean_cmds(pcl))
         if pause:
-            self._wait_for_user(pause)
+            # Optionally override original scripted plot workflow:
+            user_input = self._wait_for_user(pause).strip().lower()
+            if user_input in {"q", "quit", "exit"}:
+                print("Python: Quit Gnuplot and Python!")
+                self.close()
+                # time.sleep(0.5)   # FIXME. Try to prevent emacs hang.
+                quit()  # better for interactive
+            elif user_input in {"", "c", "continue", "n", "next"}:
+                pass  # no change
+            elif user_input in {"f", "forward", "ff", "r", "run"}:
+                print("Python: Fast forward through all plots!")
+                self.pause_override = 0
+            else:
+                try:
+                    new_pause = int(user_input)
+                    self.pause_override = new_pause
+                    print(f"Python: Sleep for following plots is set to = {self.pause_override}.")
+                except ValueError:
+                    # No change
+                    print("Python: Unrecognised response.  Continuing...")
+        return
 
     def _wait_for_user(self, pause_option):
         """Mimic Gnuplot's pause functionality in Python based on pause option.
@@ -128,29 +211,32 @@ class GnuplotController:
         Note:
         gnuplot can't see keypresses so "pause key" can't be used.
         python can't see  gnuplot mouse clicks so "pause mouse" also won't work.
-        These work: "pause -1", "pause 0" etc."""
+        These work: "pause -1", "pause 0" etc.
+        """
+        user_input = ""
         if pause_option == "mouse_measure":
-                self._cmd(self._mouse_measurement_cmds())
-                # print("Python: Mouse measure commands added to script log.\nRun script from gnuplot manually from a terminal.")
-                input("Python: Mouse Measurements! Next keypress must be in gnuplot window!\n")
+            self.cmd(self._mouse_measurement_cmds())
+            # print("Python: Mouse measure commands added to script log.\nRun script from gnuplot manually from a terminal.")
+            user_input = input("Python: Mouse Measurements! Next keypress must be in gnuplot window!\n")
         elif pause_option == "mouse":
-            print(f"Python: Option \"{pause_option}\" to gnuplot pause won't work as expected.\nTo get these to work you must run the script within gnuplot!  Try -1 instead.")
+            print(
+                f"Python: Option \"{pause_option}\" to gnuplot pause won't work as expected.\nTo get these to work you must run the script within gnuplot!  Try -1 instead."
+            )
             input("Python: Press Enter to continue...\n")  # Wait for keypress
         elif isinstance(pause_option, int):
             if pause_option < 0:
-                input("Python: Press Enter to continue...\n")
-                self.gnuplot.stdin.write("\n") # gnuplot needs a char!
+                user_input = input("Python: Press Enter to continue (or 'q' to quit):...\n")
+                self.gnuplot.stdin.write("\n")  # gnuplot needs a char!
                 self.gnuplot.stdin.flush()
             else:
                 print(f"Python: Pausing for {pause_option} seconds...")
                 time.sleep(pause_option)  # Wait for a specified number of seconds
         else:
-            print(f"Python: Invalid pause option = \"{pause_option}\".")
-        return
+            print(f"Python: Invalid pause option = \"{pause_option}\". Try pause=\"mouse_measure\" or Gnuplot standard values: -1, 0, 3, etc. ")
+        return user_input
 
     def close(self):
         """Close the gnuplot window and end the session."""
-        
         if self.is_debug:
             print("# GNUPLOT LOG SCRIPT FOR DEBUGGING:")
             print(self.script)
@@ -163,14 +249,13 @@ class GnuplotController:
         # if self.gnuplot.poll() is None:  # None means the process is still running
         """Properly close Gnuplot."""
         try:
-            self.gnuplot.stdin.write("exit\n")   # Terminate gnuplot gracefully
+            self.gnuplot.stdin.write("exit\n")  # Terminate gnuplot gracefully
             self.gnuplot.stdin.flush()
             self.gnuplot.stdin.close()
             #self.gnuplot.wait()
             #self.gnuplot.terminate()
         except Exception as e:
             print(f"Error closing gnuplot: {e}")
-
 
     def _mouse_measurement_cmds(self) -> str:
         """Gnuplot code that adds the ability to measure deltas and gradients using the mouse on on interactive plot.
@@ -223,6 +308,7 @@ class GnuplotController:
 
         """
 
+
 def interaction_demo():
     """Test GnuplotController."""
     logger.debug("test() \t= \"{}\"".format("GnuplotController"))
@@ -249,7 +335,7 @@ class GnuplotSnippets():
      this_object.preplot_miscellaneous("# e.g. function definitions go here")
      this_object.add_dataframe_to_preplot_miscellaneous(dataframe, "$ValidDataBlockName") # use if required
      this_object.preplot_set_cmds("# e.g. set title, xrange etc")
-     this_object.plot_cmd_lines('# Assemble lines minus the plot command e.g. "$ValidDataBlockName using 2:3" OR "sin(x)" go here')
+     this_object.plot_elements('# Assemble lines minus the plot command e.g. "$ValidDataBlockName using 2:3" OR "sin(x)" go here')
      this_object.postplot_cmds("# Any post plot commands go here e.g. mouse interaction go here")
     When all is send the output of each of the following methods to gnuplot:
      this_object.preplot_miscellaneous()
@@ -259,56 +345,47 @@ class GnuplotSnippets():
     """
 
     def __init__(self) -> None:
-        """Initialise.
-        """
+        """Initialise all snippets to empty."""
         # These are gnuplot command snippets
-        self.__terminal_str: str = ""              # set terminal command
-        self.__preplot_str: str = ""               # set and unset commands to process before plotting
-        # Each "line" that makes up a complex plot string minus the 'plot ' at the beginning.
-        self.__plot_lines: tuple = ()   # lines for the next plot command in a more convenient form for altering.
-        self.__postplot_str: str = ""               # set and unset commands to process after plotting
-        #
-        self.__plot_lines_OLD: str = ""  # lines for the next plot command.
-        self.__preplot_miscellaneous_OLD: str = ""  # miscellaneous strings to process before plotting, e.g. function definitions.
-        # self.preplot_set_cmds(*setup_cmds)
+        self.__terminal: str = ""  # set terminal and terminal-related commands
+        self.__preplot: str = ""  # set and unset commands to process before plotting
+        self.__plot_elements: tuple = ()  # plot elements for the next plot command in a more convenient form for altering.
+        self.__postplot: str = ""  # set and unset commands to process after plotting
         return
 
     def __repr__(self) -> str:
         """Create object string for printing/debugging."""
         s: str = ''
-        # s += 'preplot_miscellaneous = """\n{}"""\n'.format(self.__preplot_miscellaneous)
-        s += 'preplot    \t= """\n{}"""\n'.format(self.__preplot_str)
-        s += 'plot_lines \t= """\n{}"""\n'.format(self.__plot_lines)
-        # s += 'plot_lines_tuple = """\n{}"""\n'.format(self.__plot_cmd_lines_tuple)
-        s += 'postplot   \t= """\n{}"""\n'.format(self.__postplot_str)
+        s += '### preplot       \t= \n"{}"\n'.format(self.__preplot)
+        s += '### plot_elements \t= \n"{}"\n'.format(self.__plot_elements)
+        s += '### postplot      \t= \n"{}"\n'.format(self.__postplot)
         # s += ' = """{}"""\n'.format()
         return s
 
     def show_all_cmds(self, gnuplot_plot_type: str = "plot"):
         """You can cut and paste this output to a manual gnuplot session for testing."""
         s: str = ''
-        # s += self.preplot_miscellaneous()
-        s += self.preplot_str()
-        s += self.show_plot(gnuplot_plot_type=gnuplot_plot_type) + "\n"
-        s += self.postplot_str()
+        s += self.preplot()
+        s += f"{self.plot_elements()}"
+        s += self.postplot()
         return s
 
-    # def _clean_cmds(self, *setup_cmds, is_keep_format_spaces: bool = True) -> str:
+    # def _clean_cmds(self, *set_cmds, is_keep_format_spaces: bool = True) -> str:
     #     """Cleans one or more lines to the gnuplot command string.
 
     #     :param is_keep_format_spaces: keeps LHS whitespace to preserved formatting. Helps visually when printing many commands when debugging.
     #     :returns: cleaned up command string
     #     """
-    #     clean_setup_cmds: str = ""
+    #     clean_set_cmds: str = ""
     #     # Ignore empty lines
-    #     for cmd in setup_cmds:
+    #     for cmd in set_cmds:
     #         cmds = StringIO(cmd).readlines()  # type: ignore # mypy ignores this!
     #         for c in cmds:
     #             if is_keep_format_spaces:
-    #                 clean_setup_cmds += c.rstrip() + "\n"
+    #                 clean_set_cmds += c.rstrip() + "\n"
     #             else:
-    #                 clean_setup_cmds += c.strip() + "\n"
-    #     return clean_setup_cmds
+    #                 clean_set_cmds += c.strip() + "\n"
+    #     return clean_set_cmds
 
     # def preplot_miscellaneous(self, *preplot_cmds) -> str:
     #     """Append one or more lines to the gnuplot pre plot command string that you'll send to gnuplot before plotting.
@@ -322,292 +399,114 @@ class GnuplotSnippets():
     #     self.__preplot_miscellaneous_OLD += _clean_cmds(*preplot_cmds)
     #     return self.__preplot_miscellaneous
 
-    def set_terminal_and_output(self, *setup_cmds, id: str = "") -> str:
-        """Set terminal and output with some safety.
+    def set_terminal_and_output(self, *set_cmds) -> str:
+        """Append set terminal and output commands to the preplot snippet.
 
-        Note: You may want to include set xlabel and xformat based on your terminal choice.
-        :param setup_cmds: one or more lines relating to set terminal.
-        :param id: unique id without spaces, e.g. "ModelA" will be used to form a gnuplot variable name
-        :returns: preplot string
+        Sets termimal with some safety.
+        Note: You may want to include set xlabel and xformat here based on your terminal choice.
+        Usage: gs.set_terminal_and_output('set terminal qt size 1400,700 position 300,150 title "{}"'.format("Window Title")
+        :param set_cmds: one or more commands relating to set terminal.
+        :returns: pre plot command string
         """
         # Add some internal gnuplot protection against multiple terminals.
-        return self.preplot_str(
-            'unset terminal\noutput = ""\n',  # take some precautions
-            f'if (!exists("terminal_type")) {{ terminal_type="Terminal{id}"  # only set term once!',
-            '  print terminal_type',
-            '  ' + _clean_cmds(*setup_cmds),  # set terminal and output
-            '}')
+        # This is overkill...
+        # return self.preplot(
+        #     'unset terminal\noutput = ""\n',  # take some precautions
+        #     f'if (!exists("terminal_type")) {{ terminal_type="Terminal{id}"  # only set term once!',
+        #     '  print terminal_type',
+        #     '  ' + _clean_cmds(*set_cmds),  # set terminal and output
+        #     '}')
+        # if not title == "":
+        #     set_cmd += f' title "{title}"'  # append title
+        return self.preplot(
+            'output = ""\n',  # take some precautions
+            _clean_cmds(*set_cmds),  # set terminal and output
+        )
 
-    def preplot_str(self, *setup_cmds) -> str:
-        """Append one or more lines to the gnuplot setup command string that you'll send to gnuplot before plotting.
-        e.g. all gnuplot "set" and "unset" commands: title, ranges, labels, arrows etc.
+    def preplot(self, *set_cmds, reset: bool = False) -> str:
+        """Append one or more lines to the preplot snippet to be sent to gnuplot before plotting.
 
-        :param setup_cmds: one or more lines for the plot command
-        :returns: setup lines string
+        For example, all gnuplot "set" and "unset" commands: title, ranges, labels, arrows etc.
+        :param set_cmds: one or more set/unset commands or datablock definitions
+        :param reset: if true clear preplot snippet before appending.  Usually not required.
+        :returns: preplot snippet of all commands
         """
-        self.__preplot_str += _clean_cmds(*setup_cmds)
-        return self.__preplot_str
-
-    def add_datablock_to_preplot(self, id, dataframe, datablock_name: str = "$DataBlock1") -> str:
-        """Converts a pandas dataframe to a datablock and appends it to the setup string (that is sent to gnuplot before
-        plotting).  The resulting datablock is available for gnuplot to use for plotting. When creating the plot lines
-        you must refer to the datablock by the valid gnuplot datablock name you used here!
-
-        :param id: unique id without spaces, e.g. "ModelA" will be used to form a gnuplot variable name
-        :param dataframe: pandas dataframe
-        :param datablock_name: str unique valid gnuplot datablock name. Default is "$DataBlock1".
-        Use this same name when creating the plot lines!
-        :returns: preplot string
-
-        """
-        content = dataframe.to_csv(header=False, index=False, sep='\t')  # no header or extra index column!
-        self.__preplot_str += '{} << EOD\n{}EOD\n'.format(datablock_name, content)
-        self.__preplot_str += f'dataBlock{id} = "{datablock_name}"\n'
-        return self.__preplot_str
-
-    def flatten_to_tuple_of_strings(self, *args):
-        """Flattens a tuple containing strings and possible nested tuples of strings.
-
-        :returns: tuple of strings
-        """
-
-        def _flatten(item):
-            """Recursive flatten."""
-            if isinstance(item, (list, tuple)):
-                for sub in item:
-                    yield from _flatten(sub)
-            else:
-                yield str(item)
-
-        return tuple(_flatten(args))
-
-    def plot_lines(self, *plot_cmd_lines, reset: bool = False):
-        """Append one or more lines to the tuple that will become the gnuplot plot string.
-
-        If you are using a gnuplot data block you must use the same
-        valid gnuplot name you used when calling add_dataframe_to_preplot_miscellaneous(),
-        e.g. this_object.add_dataframe_to_preplot_miscellaneous(dataframe, "$DataBlock1") and here
-        this_object.plot_lines('$DataBlock1 using 2:3 title "Some title"')
-        Accepts either:
-           - Multiple arguments: show_plot_new(line1, line2)
-           - A single tuple of lines:     show_plot_new((line1, line2))
-        :param plot_lines: one or more lines for the plot command
-        :returns: complete tuple of plot cmd lines
-        """
-        # print("### show_plot_new(): Before...")
-        # print(self.__plot_cmd_lines_tuple)
-        # print(plot_cmd_lines)
         if reset:
-            self.__plot_lines = ()  # clear
-        self.__plot_lines += self.flatten_to_tuple_of_strings(plot_cmd_lines)
-        # print("### show_plot_new(): After...")
-        # print(self.__plot_cmd_lines_tuple)
-        return self.__plot_lines
+            self.__preplot = ""  # clear
+        self.__preplot += _clean_cmds(*set_cmds)
+        return self.__preplot
 
-    # def reset_plot_lines(self, *plot_cmd_lines) -> None:
-    #     """Clear plot lines then optionally add new ones.
+    def add_datablock_to_preplot(self, dataframe: pd.DataFrame, datablock_name: str = "$DataBlock1") -> str:
+        """Convert a pandas dataframe to a datablock and append it to the preplot snippet.
 
-    #     :param plot_lines: one or more lines for the plot command
-    #     :returns: gnuplot plot lines string
-    #     """
-    #     self.__plot_cmd_lines_tuple = ()  # clear
-    #     self.plot_lines(*plot_cmd_lines)
-    #     return
+        For more sophisticated plots, e.g. with contours, you'll need to write your data a gnuplot-compatible
+        formatted file and use the filename in the plot element.
+        :param dataframe: pandas DataFrame
+        :param datablock_name: str unique valid gnuplot datablock name.  Default is "$DataBlock1".  Use this same name
+            when creating the plot_elements()!
 
-    def plot_str(self, *plot_cmd_lines, gnuplot_plot_type: str = "plot") -> str:
-        """Create a complete plot string with "plot" at the beginning and all plot cmd lines with optionally appended extra lines.
-
-        The additional *plot_cmd_lines arg can be a tuple e.g. from plot_cmd_lines() or
-        multiple args with one plot_cmd_line line per arg.
-
-        Accepts either:
-           - Multiple arguments: show_plot_new(line1, line2)
-           - A single tuple of lines:     show_plot_new((line1, line2))
-        :param plot_lines: one or more lines for the plot command
-        :returns: returns all lines as a gnuplot string with the "plot " at the beginning.
+        :returns: preplot snippet
         """
-        self.plot_lines(plot_cmd_lines)  # add lines
-        gnuplot_continue_str = ",  \\\n"
-        pcl = gnuplot_plot_type + " "
-        for plot_line in self.__plot_lines:
-            pcl += plot_line.strip() + gnuplot_continue_str
-        pcl = pcl.rstrip(gnuplot_continue_str) + "\n"
-        return pcl
+        separator = "\t"  # data separator
+        self.__preplot += f'set datafile separator "{separator}"\n'
+        content = dataframe.to_csv(header=True, index=False, sep=f"{separator}")  # no extra index column!
+        self.__preplot += f'{datablock_name} << EOD\n# {content}EOD\n'  # Note: '#' is to comment out the column header
+        # self.__preplot += f'DataBlock{id} = "{datablock_name}"\n'
+        return self.__preplot
 
-    def postplot_str(self, *post_plot_cmds) -> str:
-        """Append one or more lines to the gnuplot post plot command string that is sent to gnuplot after plotting.
+    def plot_elements(self, *plot_elements, reset: bool = False) -> tuple[str]:
+        """Append one or more plot elements lines to the gnuplot plot string.
         
-        Usually after the last multiplot. e.g. mouse control or cleanup.
-        :param post_plot_cmds: one or more lines to send after plotting, e.g. mouse control or cleanup
+        Note: from Gnuplot help, a plot command for Gnuplot looks like this:
+           plot {<ranges>} <plot-element> {, <plot-element>, <plot-element>}
+        Accepts either:
+           - Multiple element strings as arguments: plot_elements(plot_element1, plot_element2)
+           - Tuples of plot element strings: plot_elements((plot_element1, plot_element2))
+        :param plot_elements: one or more Gnuplot plot elements
+        :param reset: if true clear plot elements before appending.
+        :returns: tuple of plot_elements
+        """
+        if reset:
+            self.__plot_elements = ()  # clear
+        self.__plot_elements += _flatten_to_tuple_of_strings(plot_elements)
+        return self.__plot_elements
+
+    # def plot(self, *plot_elements) -> tuple[str]:
+    #     """Append args as gnuplot plot command lines to snippet.  These minus "plot" at the beginning.
+
+    #     Note the GnuplotController.plot() takes these lines, and builds a valid gnuplot plot string with "plot "
+    #     at the begining, like this 'plot "self.__plot_elements[0]",\\n "self.__plot_elements[1]"'
+    #     The additional *plot_elements arg can be a tuple e.g. from plot_elements() or
+    #     multiple args with one plot_cmd_line line per arg.
+
+    #     Accepts either:
+    #        - Multiple arguments: plot(line1, line2)
+    #        - A single tuple of lines: plot((line1, line2))
+    #     :param plot_elements: one or more lines for the plot command with "plot" at the beginning.
+    #     :returns: returns all lines as a tuple  without the "plot " at the beginning.
+    #     """
+    #     self.__plot_elements += _flatten_to_tuple_of_strings(plot_elements)
+    #     return self.__plot_elements
+
+    def postplot(self, *post_plot_cmds, defaults: bool = False, reset: bool = False) -> str:
+        """Append one or more post_plot_cmds to the postplot snippet to be sent to gnuplot after plotting.
+        
+        Usually "unset" commands: labels, arrows, multiplot etc.
+        Examples to consider: "unset format x; unset xdata; unset x2tics; unset x2mtics; unset y2mtics;"
+        :param post_plot_cmds: one or more commands to send after plotting.
+        :param defaults: = True to use fairly safe typical commands.
+        :param reset: if true clear postplot snippet before appending.  Usually not required.
         :returns: post plot command string
         """
-        self.__postplot_str += _clean_cmds(*post_plot_cmds)
-        return self.__postplot_str
+        if reset:
+            self.__postplot = ""  # clear
+        default_cmds = ""
+        if defaults:
+            default_cmds = 'unset label; unset arrow; unset multiplot; output = ""\n'
+        self.__postplot += default_cmds + _clean_cmds(*post_plot_cmds)
+        return self.__postplot
 
-    def plot_cmd_lines(self, *plot_cmd_lines) -> str:
-        """Append one or more lines to the gnuplot plot string. If you are using a gnuplot data block you must use the same
-        valid gnuplot name you used when calling add_dataframe_to_preplot_miscellaneous(),
-        e.g. this_object.add_dataframe_to_preplot_miscellaneous(dataframe, "$DataBlock1") and here
-        this_object.plot_lines('$DataBlock1 using 2:3 title "Some title"')
-
-        :param plot_lines: one or more lines for the plot command
-        :returns: gnuplot plot lines string
-        """
-        raise RuntimeError("plot_cmd_lines() is deprecated and should not be used.")
-        # gnuplot_continue_str = ",  \\\n"
-        # pcl = ""
-        # for plot_line in plot_cmd_lines:
-        #     pcl += plot_line.strip() + gnuplot_continue_str
-        # pcl = pcl.rstrip(gnuplot_continue_str)
-        # if pcl:
-        #     if self.__plot_lines:
-        #         # Append comma, continuation, newline
-        #         self.__plot_lines = self.__plot_lines.rstrip() + gnuplot_continue_str
-        #     self.__plot_lines += pcl + "\n"
-        # return self.__plot_lines
-
-    def reset_plot_cmd_lines(self, *plot_lines) -> None:
-        """Clear plot lines ready for next plot and optionally add new ones.
-        :param plot_lines: one or more lines for the plot command
-        :returns: gnuplot plot lines string
-        """
-        raise RuntimeError("reset_plot_cmd_lines() is deprecated and should not be used.")
-        # self.__plot_lines = ""  # clear
-        # self.plot_cmd_lines(*plot_lines)
-        # return
-
-    def show_plot(self, *append_plot_cmd_lines, gnuplot_plot_type: str = "plot") -> str:
-        """Create plot command string to send to gnuplot to plot all lines
-        created with this_object.add_plot_lines()
-
-        :param append_plot_cmd_lines: Extra plot lines to optionally fappend.
-        :param gnuplot_plot_type: str: Gnuplot plot command string, e.g. , plot or splot
-        :returns: plot command string to send to gnuplot
-        """
-        raise RuntimeError("show_plot() is deprecated and should not be used.")
-        # self.plot_cmd_lines(*append_plot_cmd_lines)
-        # return gnuplot_plot_type + " " + self.__plot_lines
-
-    # def append_mouse_measurement_postplot_cmds(self) -> None:
-    #     """This adds the ability to measure deltas and gradients usinig the mouse on on interactive plot. Very cool."""
-    #     # self.postplot_cmds(r"""
-    #     #     # Esc or Enter to exit loop
-    #     #     pause mouse keypress "\nPress 'g' key in plot window to change mouse buttons to measure deltas and gradients else Esc or Enter to quit..."
-    #     #     while (1) {
-    #     #         if (MOUSE_KEY == 27 || MOUSE_KEY == 10 || MOUSE_KEY == 13) {  # 27 = Esc or Enter to exit
-    #     #             print "\nPress enter here (in terminal window) to terminate plot window..."
-    #     #             break
-    #     #         }
-    #     #         if (MOUSE_KEY == 103) { # 103 = 'g' key to measure gradient
-    #     #             # print MOUSE_KEY
-    #     #             pause mouse "\nFirst point for gradient.."
-    #     #             if (exists("MOUSE_BUTTON")) {
-    #     #                 mx11 = MOUSE_X; my11 = MOUSE_Y; my21 = MOUSE_Y2;
-    #     #                 print sprintf("\nMouse button %d at x1, y1, y2 = %.8g, %.8g, %.8g", MOUSE_BUTTON, MOUSE_X, MOUSE_Y, MOUSE_Y2)
-    #     #                 set label 901 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
-    #     #                 set label 901 at MOUSE_X, MOUSE_Y
-    #     #                 set label 901 point pt 6 ps 3
-    #     #                 replot
-    #     #             } else {
-    #     #                  print "No mouse click?"
-    #     #             }
-    #     #             pause mouse "Second point for gradient.."
-    #     #             if (exists("MOUSE_BUTTON")) {
-    #     #                 mx12 = MOUSE_X; my12 = MOUSE_Y; my22 = MOUSE_Y2;
-    #     #                 print sprintf("\nMouse button %d at x1, y1, y2 = %.8g, %.8g, %.8g", MOUSE_BUTTON, MOUSE_X, MOUSE_Y, MOUSE_Y2)
-    #     #                 set label 902 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
-    #     #                 set label 902 at MOUSE_X, MOUSE_Y
-    #     #                 set label 902 point pt 6 ps 3
-    #     #                 replot
-    #     #             } else {
-    #     #                  print "No mouse click?"
-    #     #             }
-    #     #             print sprintf("## Deltas:    deltax  = %9.6g; deltay  = %9.6g; deltay2 = %9.6g;", (mx12-mx11), (my12-my11), (my22-my21))
-    #     #             if ((mx12-mx11) != 0.) {
-    #     #                 print sprintf("## Gradients: dy1/dx1 = %9.6g; dy2/dx1 = %9.6g;", (my12-my11)/(mx12-mx11), (my22-my21)/(mx12-mx11))
-    #     #             }
-    #     #             print "Mouse reset to normal!.."
-    #     #         }
-    #     #         pause mouse keypress "\nPress 'g' key in plot window to change mouse buttons to measure deltas and gradients else Esc or Enter to quit..."
-    #     #     }
-    #     # """, is_keep_format_spaces=True)
-    #     return
-
-    # def mouse_measurement_cmds(self) -> str:
-    #     """This adds the ability to measure deltas and gradients usinig the mouse on on interactive plot. Very cool."""
-    #     return r"""
-    #         # Esc or Enter to exit loop
-    #         pause mouse keypress "\nPress 'g' key in plot window to change mouse buttons to measure deltas and gradients else Esc or Enter to quit..."
-    #         while (1) {
-    #             if (MOUSE_KEY == 27 || MOUSE_KEY == 10 || MOUSE_KEY == 13) {  # 27 = Esc or Enter to exit
-    #                 print "\nPress enter here (in terminal window) to terminate plot window..."
-    #                 break
-    #             }
-    #             if (MOUSE_KEY == 103) { # 103 = 'g' key to measure gradient
-    #                 # print MOUSE_KEY
-    #                 pause mouse "\nFirst point for gradient.."
-    #                 if (exists("MOUSE_BUTTON")) {
-    #                     mx11 = MOUSE_X; my11 = MOUSE_Y; my21 = MOUSE_Y2;
-    #                     print sprintf("\nMouse button %d at x1, y1, y2 = %.8g, %.8g, %.8g", MOUSE_BUTTON, MOUSE_X, MOUSE_Y, MOUSE_Y2)
-    #                     set label 901 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
-    #                     set label 901 at MOUSE_X, MOUSE_Y
-    #                     set label 901 point pt 6 ps 3
-    #                     replot
-    #                 } else {
-    #                      print "No mouse click?"
-    #                 }
-    #                 pause mouse "Second point for gradient.."
-    #                 if (exists("MOUSE_BUTTON")) {
-    #                     mx12 = MOUSE_X; my12 = MOUSE_Y; my22 = MOUSE_Y2;
-    #                     print sprintf("\nMouse button %d at x1, y1, y2 = %.8g, %.8g, %.8g", MOUSE_BUTTON, MOUSE_X, MOUSE_Y, MOUSE_Y2)
-    #                     set label 902 sprintf("   Mouse button %d\n   clicked here!", MOUSE_BUTTON)
-    #                     set label 902 at MOUSE_X, MOUSE_Y
-    #                     set label 902 point pt 6 ps 3
-    #                     replot
-    #                 } else {
-    #                      print "No mouse click?"
-    #                 }
-    #                 print sprintf("## Deltas:    deltax  = %9.6g; deltay  = %9.6g; deltay2 = %9.6g;", (mx12-mx11), (my12-my11), (my22-my21))
-    #                 if ((mx12-mx11) != 0.) {
-    #                     print sprintf("## Gradients: dy1/dx1 = %9.6g; dy2/dx1 = %9.6g;", (my12-my11)/(mx12-mx11), (my22-my21)/(mx12-mx11))
-    #                 }
-    #                 print "Mouse reset to normal!.."
-    #             }
-    #             pause mouse keypress "\nPress 'g' key in plot window to change mouse buttons to measure deltas and gradients else Esc or Enter to quit..."
-    #         }
-    #     """
-
-    # def pause(self, pygnuplot, gnuplot_pause: Any = -1, message: str = "", is_mouse_measure: bool = False) -> None:
-    #     """Make gnuplot pause work from python.
-
-    #     :param pygnuplot: the cmd() function of pygnuplot that sends a string to gnuplot
-    #     :param gnuplot_pause: seconds to pause, else -1 to wait for return, else "mouse" etc.
-    #     :param message: Optional message
-    #     :param is_mouse_measure: If true, pause with no prompts to user because gnuplot (mouse measurement) code will manage prompts.
-    #     :returns: None
-
-    #     """
-    #     if gnuplot_pause == -1 or is_mouse_measure:
-    #         # Halt the code so we can interact with the plot:
-    #         if is_mouse_measure:
-    #             pygnuplot(self.mouse_measurement_cmds())
-    #             input()  # Mouse message code will display prompts instead.
-    #         else:
-    #             input("Press enter here (in terminal window) to terminate plot window...")
-    #     else:
-    #         pygnuplot('pause {} {}'.format(gnuplot_pause, '"' + message + '"'))
-    #     return
-
-    interaction_demo()
-#             pygnuplot(self.mouse_measurement_cmds())
-#             input()  # Mouse message code will display prompts instead.
-#         else:
-#             input("Press enter here (in terminal window) to terminate plot window...")
-#     else:
-#         pygnuplot('pause {} {}'.format(gnuplot_pause, '"' + message + '"'))
-#     return
-    #     return
 
 #    interaction_demo()
-if __name__ == 'main':
-     interaction_demo()
+# if __name__ == 'main':
+#     interaction_demo()
