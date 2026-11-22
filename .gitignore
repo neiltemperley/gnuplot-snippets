@@ -1,0 +1,91 @@
+# Files that git ignores. 
+#========================================
+
+# Specific to this Project
+# Neil
+# Any subdirectory:
+**/Old
+**/Junk
+/Template*
+**/.venv
+pyproject-pip.ztoml
+zDEMO-*
+zJUNK-*
+
+# Emacs/General
+_*
+#*
+*~
+tags
+TAGS
+GTAGS
+*.gz
+*.zip
+*.lnk
+*.tdo
+.dir-locals.el
+
+# Core latex/pdflatex auxiliary files:
+/auto
+*.aux
+*.brf
+*.cb
+*.cb2
+*.fls
+*.fmt
+*.fot
+*.lof
+*.log
+*.lot
+*.out
+*.prv
+*.toc
+.*.lb
+_*
+*.mtc*
+*.maf
+*.sav
+
+## Intermediate latex documents:
+*.dvi
+*.xdv
+*-converted-to.*
+
+# Image files
+*.emf
+*.eps
+*.jpg
+*.pdf
+*.png
+*.ps
+*.svg
+
+## Bibliography auxiliary files (bibtex/biblatex/biber):
+*.bbl
+*.bcf
+*.blg
+*.brf
+*-blx.aux
+*-blx.bib
+*.run.xml
+
+## Build tool auxiliary files:
+*.fdb_latexmk
+*.synctex
+*.synctex(busy)
+*.synctex.gz
+*.synctex.gz(busy)
+*.pdfsync
+
+# latex glossaries
+*.acn
+*.acr
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.lzo
+*.lzs
+*.slg
+*.slo
+*.sls
