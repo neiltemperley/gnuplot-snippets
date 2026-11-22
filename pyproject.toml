@@ -1,21 +1,38 @@
-[tool.poetry]
-name = "gnuplot-advanced"
-version = "0.1.1"
-description = "Advanced Gnuplot utilities for Gnuplot power users"
-authors = ["Neil Temperley"]
-license = "MIT"
-readme = "README.md"
-packages = [{ include = "gnuplot_advanced" }]
-
-[tool.poetry.dependencies]
-python = "^3.10"
-# NOTE: Put this in the consuming project toml gnuplot-advanced = {path = "../Gnuplot_Advanced", develop = true}
-# and/or run from consumer poetry shell for example: poetry add --editable ../Gnuplot_Advanced
-
-[tool.poetry.dev-dependencies]
-pytest = "^7.0"  # Optional for testing
-
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "gnuplot-advanced"
+version = "0.1.0"
+description = "Composable gnuplot snippets for Python, for interactive and batch plotting by advanced users"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Neil Temperley" },
+]
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "pandas>=2.2.3",
+]
+
+[project.scripts]
+gnuplot-advanced-demo = "gnuplot_advanced.demo:main"
+
+[tool.poetry]
+# name = "gnuplot-advanced"
+# version = "0.1.1"
+# description = "Advanced Gnuplot utilities for Gnuplot power users"
+# authors = ["Neil Temperley"]
+packages = [{ include = "gnuplot_advanced", from = "src" }]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0,<8.0",
+    "flake8>=7.3.0,<8.0.0",
+    "isort>=9.0.0,<10.0.0",
+]
+
+
 
