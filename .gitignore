@@ -3,10 +3,12 @@
 
 #========================================
 # Python
-__pycache__/
 **/.venv
 pyproject-pip.ztoml
+__pycache__/
 .ruff_cache/
+.pytest_cache/
+.mypy_cache/
 *.pyc
 *.pyo
 *.pyd

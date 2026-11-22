@@ -1,35 +1,31 @@
-import pytest
+# Copyright (c) 2025-2026 Neil Temperley
+# SPDX-License-Identifier: MIT
+# See the LICENSE file in the project root for full license text.
+# https://github.com/neiltemperley/gnuplot-snippets
+"""Usage:
+ cd Gnuplot_Snippets;
+ pytest -s
+"""
 import logging
 
-from gnuplot_snippets.snippet import GnuplotSnippet, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
-from gnuplot_snippets.controller import GnuplotController, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
+import pytest
+from gnuplot_snippets import (GnuplotController, GnuplotSnippet)
+from gnuplot_snippets.snippet import (_flatten_to_tuple_of_strings)
 
 # ##############################################################
 logger = logging.getLogger("test")
-logger.setLevel(
-    logging.DEBUG)  # Set default logging level # DEBUG, INFO, WARNING, ERROR
-#
-# Create a formatter and attach it to the handler
-# formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+# Output to console:
+handler = logging.StreamHandler()
 formatter = logging.Formatter(
     "%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
-#
-# Output to console:
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)  # INFO, DEBUG, WARNING, ERROR
 
-#
-# File handler for logging to a file (that keeps growing!):
-# file_handler = logging.FileHandler("gnuplot_snippets.log")  # ouput to file
-# file_handler.setLevel(logging.DEBUG)
-# file_handler.setFormatter(formatter)!
-# logger.addHandler(file_handler)
 # ##############################################################
 
 
-@pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
+# @pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
 def test_flatten_to_tuple_of_strings():
     logger.debug("Args        \t= \"{}\"".format(
         _flatten_to_tuple_of_strings("Arg1", "Arg2", "Arg3")))
