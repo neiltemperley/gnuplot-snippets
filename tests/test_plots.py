@@ -1,7 +1,12 @@
 import pytest
 
-from gnuplot_advanced import Gnuplot, GnuplotController, interaction_demo  # public sees this. Must match gnuplot_advanced/__init__.el
+from gnuplot_advanced import GnuplotSnippets, GnuplotController, interaction_demo  # public sees this. Must match gnuplot_advanced/__init__.el
 # from gnuplot_advanced.core import Gnuplot, GnuplotController, interaction_demo  # developer deeper access
+
+
+def test_snippets():
+    gs = GnuplotSnippets()
+    
 
 def test_run_script_available():
     # interaction_demo()
