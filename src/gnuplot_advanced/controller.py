@@ -32,22 +32,11 @@ class GnuplotError(Exception):
     pass
 
 
-def _find_gnuplot(executable: str = "gnuplot") -> str:
-    """Return the full path to gnuplot, or raise a clear error."""
-    path = shutil.which(executable)
-    if path is None:
-        raise GnuplotNotFoundError(
-            f"Could not find '{executable}'."
-            "Install gnuplot (e.g. On linux 'sudo apt install gnuplot') and check you can run it from the terminal command prompt."
-        )
-    return path
-
-
 class GnuplotController:
     """Control creation and display of gnuplot plots."""
 
     def __init__(self, debug: bool = False, script_filename: str = ""):
-        self.gnuplot_path = _find_gnuplot()
+        self.gnuplot_path = self._find_gnuplot()
         """Open Gnuplot as a subprocess."""
         # Start gnuplot process
         self.gnuplot = subprocess.Popen(
@@ -64,6 +53,18 @@ class GnuplotController:
         self.script += f"# Created on {timestamp}\n"
         self.is_debug: bool = debug
         self.script_filename = script_filename
+
+    def _find_gnuplot(self, executable: str = "gnuplot") -> str:
+        """Return the full path to gnuplot, or raise a clear error.
+        :param executable: gnuplot executable
+        """
+        path = shutil.which(executable)
+        if path is None:
+            raise GnuplotNotFoundError(
+                f"Could not find '{executable}'."
+                "Install gnuplot (e.g. On linux 'sudo apt install gnuplot') and check you can run it from the terminal command prompt."
+            )
+        return path
 
     def cmd(self, gnuplot_str: str, show_source=False):
         """Send a command str to Gnuplot ensuring a newline termination."""
