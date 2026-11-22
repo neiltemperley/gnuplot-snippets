@@ -1,7 +1,7 @@
-# gnuplot_advanced
+# gnuplot_snippets
 
 <!--toc:start-->
-- [gnuplot_advanced](#gnuplotadvanced)
+- [gnuplot_snippets](#gnuplotadvanced)
   - [Features](#features)
   - [🚀 Overview](#🚀-overview)
   - [Background](#background)
@@ -34,7 +34,7 @@ rescripting per plot.
 
 ## 🚀 Overview
 
-`gnuplot_advanced` provides seamless integration between Python and
+`gnuplot_snippets` provides seamless integration between Python and
 Gnuplot, focused on organizing and reusing Gnuplot script components
 across complex visualizations.
 
@@ -99,15 +99,15 @@ everything for you --- but it removes a lot of friction.
 
 1. Install gnuplot.  You can find it here: http://www.gnuplot.info/
 2. Make sure running gnuplot at a terminal prompt will work!
-3. Download gnuplot_advanced from PyPI
-4. Install gnuplot_advanced:
+3. Download gnuplot_snippets from PyPI
+4. Install gnuplot_snippets:
 
 ```bash
-pip install gnuplot_advanced
+pip install gnuplot_snippets
 ```
 5. Run the demo.py
 
 ```bash
-python -m gnuplot_advanced.demo
+python -m gnuplot_snippets.demo
 ```
 6. Use the code in demo.py as template to get started.

@@ -1,7 +1,7 @@
 # Copyright (c) 2025-2026 Neil Temperley
 # SPDX-License-Identifier: MIT
 # See the LICENSE file in the project root for full license text.
-# https://github.com/neiltemperley/gnuplot-advanced
+# https://github.com/neiltemperley/gnuplot-snippets
 """Demo file for using GnuplotSnippets and GnuplotController
 Note: You must have gnuplot installed on your system as an executable.
 Usage: python -m gnuplot_adanced.demo
@@ -12,11 +12,11 @@ import time
 
 import pandas as pd
 
-from gnuplot_advanced import (GnuplotController, GnuplotSnippet, escape_str,
+from gnuplot_snippets import (GnuplotController, GnuplotSnippet, escape_str,
                               next_datablock_counter)
 
 # ##############################################################
-logger = logging.getLogger("gnuplot_advanced")
+logger = logging.getLogger("gnuplot_snippets")
 # Output to console:
 handler = logging.StreamHandler()
 formatter = logging.Formatter(
@@ -191,7 +191,7 @@ class Car(Transport):
 
 
 def main() -> None:
-    print("Running gnuplot_advanced demo...")
+    print("Running gnuplot_snippets demo...")
 
     # ##############################################################
     # EXAMPLE USAGE
