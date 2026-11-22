@@ -1,7 +1,7 @@
 # Copyright (c) 2025-2026 Neil Temperley
 # SPDX-License-Identifier: MIT
 # See the LICENSE file in the project root for full license text.
-# https://github.com/neiltemperley/gnuplot-advanced
+# https://github.com/neiltemperley/gnuplot-snippets
 """Flexible unrestricted tools for Gnuplot integration with Python."""
 import inspect
 import logging
@@ -9,7 +9,7 @@ import re
 import pandas as pd
 
 # ##############################################################
-logger = logging.getLogger("gnuplot_advanced")
+logger = logging.getLogger("gnuplot_snippets")
 # Output to console:
 handler = logging.StreamHandler()
 formatter = logging.Formatter(
@@ -404,7 +404,7 @@ class GnuplotSnippet():
 
         For more sophisticated plots, e.g. with contours, use preplot_add_datafile().
         Usage Example:
-         from gnuplot_advanced import GnuplotSnippet, next_datablock_counter
+         from gnuplot_snippets import GnuplotSnippet, next_datablock_counter
          df = pd.DataFrame(points, columns=['x_m', 'y_m'])
          datablock_name = f'$DataBlock_Profile{next_datablock_counter()}'
          gs = GnuplotSnippet()

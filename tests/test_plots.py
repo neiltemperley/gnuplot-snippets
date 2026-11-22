@@ -1,8 +1,8 @@
 import pytest
 import logging
 
-from gnuplot_advanced.snippet import GnuplotSnippet, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
-from gnuplot_advanced.controller import GnuplotController, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
+from gnuplot_snippets.snippet import GnuplotSnippet, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
+from gnuplot_snippets.controller import GnuplotController, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
 
 # ##############################################################
 logger = logging.getLogger("test")
@@ -22,7 +22,7 @@ logger.addHandler(console_handler)
 
 #
 # File handler for logging to a file (that keeps growing!):
-# file_handler = logging.FileHandler("gnuplot_advanced.log")  # ouput to file
+# file_handler = logging.FileHandler("gnuplot_snippets.log")  # ouput to file
 # file_handler.setLevel(logging.DEBUG)
 # file_handler.setFormatter(formatter)!
 # logger.addHandler(file_handler)

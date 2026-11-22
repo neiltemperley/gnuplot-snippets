@@ -3,7 +3,7 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "gnuplot-advanced"
+name = "gnuplot-snippets"
 version = "0.1.0"
 description = "Composable gnuplot snippets for Python, for interactive and batch plotting by advanced users"
 readme = "README.md"
@@ -18,14 +18,10 @@ dependencies = [
 ]
 
 [project.scripts]
-gnuplot-advanced-demo = "gnuplot_advanced.demo:main"
+gnuplot-snippets-demo = "gnuplot_snippets.demo:main"
 
 [tool.poetry]
-# name = "gnuplot-advanced"
-# version = "0.1.1"
-# description = "Advanced Gnuplot utilities for Gnuplot power users"
-# authors = ["Neil Temperley"]
-packages = [{ include = "gnuplot_advanced", from = "src" }]
+packages = [{ include = "gnuplot_snippets", from = "src" }]
 
 [dependency-groups]
 dev = [

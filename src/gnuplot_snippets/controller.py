@@ -1,7 +1,7 @@
 # Copyright (c) 2025-2026 Neil Temperley
 # SPDX-License-Identifier: MIT
 # See the LICENSE file in the project root for full license text.
-# https://github.com/neiltemperley/gnuplot-advanced
+# https://github.com/neiltemperley/gnuplot-snippets
 """Flexible unrestricted tools for Gnuplot integration with Python."""
 import logging
 import subprocess
@@ -12,7 +12,7 @@ import shutil
 from .snippet import _clean_cmds, _flatten_to_tuple_of_strings, _source, _extract_set_terminal_cmd
 
 # ##############################################################
-logger = logging.getLogger("gnuplot_advanced")
+logger = logging.getLogger("gnuplot_snippets")
 # Output to console:
 handler = logging.StreamHandler()
 formatter = logging.Formatter(
