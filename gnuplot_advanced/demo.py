@@ -27,7 +27,7 @@ _gnuplot_datablock_counter: int = 0  # very useful to ensure unique datablock na
 
 
 def next_datablock_counter() -> int:
-    """Global counter for Gnuplot datablock names to ensure unique names.
+    """Get and increment global counter to ensure unique Gnuplot datablock names.
     Very useful to add to your code."""
     global _gnuplot_datablock_counter
     _gnuplot_datablock_counter += 1
@@ -91,7 +91,7 @@ class Car(Transport):
         latex_filename = f'zJUNK-DEMOFILE-{self.name}.tex'
         gs = GnuplotSnippet()
         # Plotfile specific settings
-        gs.preplot_to_file(
+        gs.output_to_file(
             f'set terminal cairolatex color pdf size 5.0,5.0*0.7 lw 2.0',
             latex_filename,
             'set title',  # clear title
@@ -100,22 +100,22 @@ class Car(Transport):
             'set y2label "Acceleration $\\\\alpha$ [m/s^2]"; set format y2 "$%h$"',
         )
         # Terminal specific settings that undo plotfile settings above:
-        gs.preplot_to_screen(
+        gs.output_to_screen(
             f'set terminal qt title "{window_title}"',
             f'set title "{escape_str(latex_filename)}"',
             'set xlabel "Time [s]"; set format x',  # reset to screen values
             'set ylabel "Velocity [m/s]"; set format y "%0.1f"',
             'set y2label "Acceleration [m/s^2]"; set format y2',
         )
-        # Create nicely formatted datablock:
+        # Create a nicely formatted datablock:
         datablock_name = f'$DataBlock_Car{next_datablock_counter()}'  # unique datablock name
         df = pd.DataFrame(self.velocity_performance, columns=("Time_s", "Velocity_mps", "SmoothedAcceleration_mpsps"))  # pyright: ignore
         format_dict = {
             "Time_s": "9.2f",
             "Velocity_mps": "12.3f",
-            "SmoothedAcceleration_mpsps": "26"
+            "SmoothedAcceleration_mpsps": "26.5g"
         }  # human-readable formatting for datablock without compromising plot precision
-        #  OR if we want to treat all columns the same just do: df = df.map("{:15.3f}".format)
+        #  OR if we want to treat all columns the same and they are all floats just do: df = df.map("{:15.3f}".format)
         gs.preplot_add_datablock(df, datablock_name=datablock_name, format_dict=format_dict)
         # Other settings:
         gs.preplot("""
@@ -156,26 +156,55 @@ class Car(Transport):
 
 
 # ##############################################################
-# Example usage
+# EXAMPLE USAGE
+print("""Note: During the demo print messages from Python and Gnuplot are interlaced.
+and the order may not be predictable.  This can't be avoided and is not usually a problem.
+It's helpful to preceed print statements from each with a tag "Python:" or "Gnuplot:"
+so you know the source.
+""")
+demo_script_filename = "zDEMO-GNUPLOT-SCRIPTFILE.gp"  # You must choose a safe name for a file here!
+#
+gc = GnuplotController(debug=False, script_filename=demo_script_filename)
+#
+print("Python: Demo of raw interface to Gnuplot along with mouse_measure:")
+title = "Plot without snippets using the controller only.\\nPress \\\"m\\\" to try the mouse_measure functionality."
+# Note: Generally args can be one long Gnuplot script string OR one line per arg OR a mix:
+gc.preplot('print("Gnuplot: Demo of raw interface to Gnuplot along with mouse_measure:")\nreset')
+gc.preplot("""
+  set angle degrees
+  fSin(x,a) = a*x + sin(x)
+  fCos(x,a) = a*x + cos(x)
+  set xrange[-30:360*3]
+  set xlabel "x [deg]"
+  set ylabel "y [-]"
+  set label "Hello!" at graph 0.1, graph 0.7
+  set key left top
+""")
+gc.preplot(f'set title "{title}"')
+# One Gnuplot <plot-element> per arg:
+gc.plot('fSin(x, 5./1440.)', 'fCos(x, 4./1440.)', 'sin(x) with lines lw 2.0 dt 2', pause="mouse_measure")  # try the gradient measurement.
+gc.postplot("unset label")
+
+# ##############################################################
+# SNIPPETS
 # ==============================================================
 car1 = Car("Car1", 0, 100, 0.0001, 0.0001, 0.1, 8.0)
 car2 = Car("Car2", 0, 120, 0.00015, 0.0002, 0.2, 8.0)
 # Get snippets for each Car:
 gs_car1 = car1.gnuplot()
 gs_car2 = car2.gnuplot()
-gc = GnuplotController(debug=True, script_filename="zDEMO-GNUPLOT-SCRIPTFILE.gp")
 #
 print("Python: Plot Car1 by itself:")
-gc.preplot(gs_car1.preplot(), gs_car1.preplot_to_screen(), show_source=True)
+gc.preplot(gs_car1.preplot(), gs_car1.output_to_screen(), show_source=True)
 gc.plot(gs_car1.plot_elements(), pause=3)
 gc.postplot(gs_car1.postplot())
 print("Python: Publishing Car1:")
-gc.preplot(gs_car1.preplot_to_file(), show_source=True)
+gc.preplot(gs_car1.output_to_file(), show_source=True)
 gc.plot(gs_car1.plot_elements(), show_output=True, pause=0)
 gc.postplot(gs_car1.postplot(), 'set output')  # play safe
 #
 print("Python: Plot Car2 by itself:")
-gc.preplot(gs_car2.preplot(), gs_car2.preplot_to_screen(), show_source=True)
+gc.preplot(gs_car2.preplot(), gs_car2.output_to_screen(), show_source=True)
 gc.plot(gs_car2.plot_elements(), pause=1)
 gc.postplot(gs_car2.postplot())
 
@@ -194,11 +223,11 @@ gc.postplot(gs_car1.postplot(), gs_car2.postplot())
 # Multiplot:
 print("Python: Multiplot example:")
 gc.premultiplot('set terminal qt size 800,500 title "Multiplot"', 'set multiplot layout 1,2', show_source=True)
-gc.preplot(gs_car1.preplot(), gs_car1.preplot_to_screen(), 'set y2range[0:2]', show_source=True)
+gc.preplot(gs_car1.preplot(), gs_car1.output_to_screen(), 'set y2range[0:2]', show_source=True)
 gc.plot(gs_car1.plot_elements(), pause=0)
 gc.postplot(gs_car1.postplot())
 #
-gc.preplot(gs_car2.preplot(), gs_car2.preplot_to_screen(), 'set y2range[0:2]', show_source=True)
+gc.preplot(gs_car2.preplot(), gs_car2.output_to_screen(), 'set y2range[0:2]', show_source=True)
 gc.plot(gs_car2.plot_elements(), pause=-1)  # stop on last plot
 gc.postplot(gs_car2.postplot())
 #
@@ -211,20 +240,22 @@ gc.premultiplot(
     'set multiplot layout 1,2',
 )
 # For a diagnostic on screen we see xlabel etc as would be sent to a file
-gc.preplot(gs_car1.preplot(), gs_car1.preplot_to_file())
+gc.preplot(gs_car1.preplot(), gs_car1.output_to_file())
 gc.plot(gs_car1.plot_elements(), pause=0)
 gc.postplot(gs_car1.postplot())
 #
-gc.preplot(gs_car2.preplot(), gs_car2.preplot_to_file())
+gc.preplot(gs_car2.preplot(), gs_car2.output_to_file())
 gc.plot(gs_car2.plot_elements(), pause=-1)  # stop on last plot
 gc.postplot(gs_car2.postplot())
 #
 gc.postmultiplot()
 # ==============================================================
-# Demo array slicing to see some curves but not all:
+# Demo array slicing to see some curves from plot_elements but not all:
 print("Python: Plot Car1 some curves only:")
-gc.preplot(gs_car1.preplot(), gs_car1.preplot_to_screen(), 'print("Gnuplot: Plot Car1 some curves only:")', show_source=True)
+gc.preplot(gs_car1.preplot(), gs_car1.output_to_screen(), 'print("Gnuplot: Plot Car1 some curves only:")', show_source=True)
 gc.plot(gs_car1.plot_elements()[0], gs_car1.plot_elements()[-2:], pause=3)
 gc.postplot(gs_car1.postplot())
 #
+# ==============================================================
 gc.close()
+print(f'Try running the demo script file directly using "gnuplot {demo_script_filename}"\nThis is useful for debugging Gnuplot commands.')

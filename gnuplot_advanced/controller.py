@@ -54,9 +54,10 @@ class GnuplotController:
         self.script_filename = script_filename
 
     def cmd(self, gnuplot_str: str, show_source=False):
-        """Send the gnuplot command str without checks."""
+        """Send command str to Gnuplot ensuring a newline termination."""
         cmd_source: str = f'# {_source(is_snippet=False)}\n' if show_source else ""
-        self.script += cmd_source + gnuplot_str.rstrip() + "\n"  # ensure a newline termination
+        gnuplot_str = gnuplot_str.rstrip() + "\n"  # ensure a newline termination
+        self.script += cmd_source + gnuplot_str
         if self.gnuplot.stdin is not None:
             self.gnuplot.stdin.write(gnuplot_str)
             self.gnuplot.stdin.flush()
@@ -135,9 +136,8 @@ class GnuplotController:
             # Optionally override original scripted plot workflow:
             user_input = self._wait_for_user(pause).strip().lower()
             if user_input in {"q", "quit", "exit"}:
-                print("Python: Quit Gnuplot and Python!")
+                print("Python: Quitting Gnuplot and Python!")
                 self.close()
-                # time.sleep(0.5)   # FIXME. Try to prevent emacs hang.
                 quit()  # better for interactive
             elif user_input in {"", "n", "next"}:
                 pass  # no change
@@ -175,7 +175,7 @@ class GnuplotController:
             input("Python: Press Enter to continue...\n")  # Wait for keypress
         elif isinstance(pause_option, int):
             if pause_option < 0:
-                user_input = input("Python: Press Enter to continue (or 'q' to quit):...\n")
+                user_input = input("Python: Press Enter to continue (or 'q' to quit, 'f' for fast forward, 'N' for N sec delays):...\n")
                 if self.gnuplot.stdin is not None:
                     self.gnuplot.stdin.write("\n")  # gnuplot needs a char!
                     self.gnuplot.stdin.flush()
@@ -183,7 +183,7 @@ class GnuplotController:
                 print(f"Python: Pausing for {pause_option} seconds...")
                 time.sleep(pause_option)  # Wait for a specified number of seconds
         else:
-            print(f"Python: Invalid pause option = \"{pause_option}\". Try pause=\"mouse_measure\" or Gnuplot standard values: -1, 0, 3, etc. ")
+            print(f"Python: Invalid pause option = \"{pause_option}\". Try pause=\"mouse_measure\" or Gnuplot standard pause integer values: -1, 0, 3, etc. ")
         return user_input
 
     def close(self):
@@ -193,7 +193,7 @@ class GnuplotController:
             print("# GNUPLOT LOG SCRIPT FOR DEBUGGING:")
             print(self.script)
         if self.script_filename:
-            print(f"Writing script to \"{self.script_filename}\".")
+            print(f"Python: Writing script to \"{self.script_filename}\".")
             # print(f"Writing script to \"{os.path.abspath(self.script_filename)}\".")
             with open(self.script_filename, "w") as f:
                 f.write(self.script)
@@ -203,10 +203,11 @@ class GnuplotController:
                 self.gnuplot.stdin.flush()
                 self.gnuplot.stdin.close()
         except Exception as e:
-            print(f"Error closing gnuplot: {e}")
+            print(f"Python: Error closing gnuplot: {e}")
+        time.sleep(0.5)  # a moment for the plot window to close.
         # If plot window is hung:
         if self.gnuplot.stdin and self.gnuplot.poll() is not None:
-            self.gnuplot.terminate()  # ask it to exit nicely
+            self.gnuplot.terminate()  # exit nicely
             try:
                 self.gnuplot.wait(timeout=3)  # give it a few seconds to exit
             except subprocess.TimeoutExpired:
