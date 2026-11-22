@@ -71,7 +71,30 @@ class GnuplotController:
         cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
         self.cmd(_clean_cmds(cmd_source, *cmds))
 
-    def plot(self, *plot_elements, pause: int | str = 0, plot_and_ranges: str = "plot", show_source=False):
+    def premultiplot(self, set_terminal_cmd: str, set_multiplot_cmd: str, show_source=False):
+        """Send 'set terminal' and matching 'set multiplot' cmds to begin a multiplot.
+
+        Note: Once premultiplot() is called, all 'set terminal' commands in snippets are blocked until an
+        'unset multiplot' is sent by calling postmultiplot().
+        Usage: when plotting using GnuplotController gc :
+         gc.premultiplot('set terminal qt 1000,1000 title "Multiplot"', 'set multiplot layout 1,2')
+         # ...various...preplot(), and plot() and postplot() commands for each plot come next
+         # Finally...
+         gc.postmultiplot()  # Important to unblock 'set terminal' commands in snippets.
+       """
+        cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
+        self.cmd(cmd_source + f'unset multiplot\n{set_terminal_cmd}\n{set_multiplot_cmd}\n')
+
+    def postmultiplot(self, *cmds: str, show_source=False):
+        """Send 'unset multiplot' plus other cmds to cleanup after a multiplot.
+
+        Note: Once premultiplot() is called, all 'set terminal' commands in snippets are blocked until an
+        'unset multiplot' is sent by calling postmultiplot().
+        """
+        cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
+        self.cmd(_clean_cmds(cmd_source, 'unset multiplot', *cmds))
+
+    def plot(self, *plot_elements, pause: int | str = 0, plot_and_ranges: str = "plot", show_output: bool = True, show_source: bool = False):
         """Build and send the plot command and pause option to Gnuplot.
 
         Showing the plot maintains synchronisation between the gnuplot plot window
@@ -95,11 +118,19 @@ class GnuplotController:
         for pe in plot_elements:
             plot_cmd += pe.strip() + gnuplot_continue_str
         plot_cmd = cmd_source + plot_cmd.rstrip(gnuplot_continue_str) + "\n"
-
+        # Look for integer pause amount:
         if isinstance(pause, int):
-            self.cmd(_clean_cmds(plot_cmd).rstrip() + f"\npause {pause}\n")
+            plot_cmd = _clean_cmds(plot_cmd).rstrip() + f"\npause {pause}\n"
         else:
-            self.cmd(_clean_cmds(plot_cmd))
+            plot_cmd = _clean_cmds(plot_cmd)
+        if show_output:
+            plot_cmd += """
+            if (strlen(GPVAL_OUTPUT) > 0) {
+              print(sprintf("Gnuplot: Created plot file: \\"%s\\"", GPVAL_OUTPUT))
+            } 
+            """
+        self.cmd(plot_cmd)  # send it
+        # --------------------------------------------------------------
         if pause:
             # Optionally override original scripted plot workflow:
             user_input = self._wait_for_user(pause).strip().lower()
@@ -108,9 +139,9 @@ class GnuplotController:
                 self.close()
                 # time.sleep(0.5)   # FIXME. Try to prevent emacs hang.
                 quit()  # better for interactive
-            elif user_input in {"", "c", "continue", "n", "next"}:
+            elif user_input in {"", "n", "next"}:
                 pass  # no change
-            elif user_input in {"f", "forward", "ff", "r", "run"}:
+            elif user_input in {"c", "continue", "f", "forward", "ff", "r", "run"}:
                 print("Python: Fast forward through all plots!")
                 self.pause_override = 0
             else:
@@ -171,9 +202,16 @@ class GnuplotController:
                 self.gnuplot.stdin.write("exit\n")  # End Gnuplot gracefully
                 self.gnuplot.stdin.flush()
                 self.gnuplot.stdin.close()
-            # if self.gnuplot.poll() is None:  # None means the process is still running
         except Exception as e:
             print(f"Error closing gnuplot: {e}")
+        # If plot window is hung:
+        if self.gnuplot.stdin and self.gnuplot.poll() is not None:
+            self.gnuplot.terminate()  # ask it to exit nicely
+            try:
+                self.gnuplot.wait(timeout=3)  # give it a few seconds to exit
+            except subprocess.TimeoutExpired:
+                self.gnuplot.kill()  # forcefully kill if it didn't exit
+        return
 
     def _mouse_measurement_cmds(self) -> str:
         """Gnuplot code that adds the ability to measure deltas and gradients using the mouse on on interactive plot.

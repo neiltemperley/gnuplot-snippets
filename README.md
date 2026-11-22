@@ -31,7 +31,7 @@ rescripting per plot.
 
 - Full access to Gnuplot functionality for sophisticated plots.
 - Minimal Gnuplot code duplication across different plots.
-- Gnuplot script logic can reside inside object classes where appropriate.
+- Gnuplot script logic resides primarily inside object classes.
 - Native-feeling plot window interaction (as if running Gnuplot directly).
 - Interactive gradient and coordinate measurement via mouse.
 - Batch-mode rendering for publication workflows.
@@ -71,15 +71,15 @@ This module addresses both issues:
 - Introducing new interactive features (like mouse measurements)
 
 The fundamental principle of snippets as implemented here is that each
-object class should generate Gnuplot scripts (snippets) to plot
-itself.  To plot multiple objects on the same graph, or to create a
-multiplot graph, those snippets are simply combined with a minimum of
-additional Gnuplot commands.
+object class should generate Gnuplot scripts (snippets) to plot itself
+on screen or to a file.  To plot multiple objects on the same graph,
+or to create a multiplot graph, those snippets are simply combined
+with a minimum of additional Gnuplot commands.
 
 > ⚠️ This package is *not intended for Gnuplot beginners*. It assumes
-> comfort with Gnuplot syntax and behavior. Rather than attempting a
-> simplified interface to Gnuplot, it empowers experienced users to
-> take full advantage of it from within Python.
+> comfort with Gnuplot syntax and behavior. It does *not* provide a
+> simplified interface to Gnuplot, rather, it empowers experienced users with
+> unrestricted access to Gnuplot from within Python.
 
 ---
 

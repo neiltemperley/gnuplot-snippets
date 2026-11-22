@@ -2,7 +2,8 @@ import pytest
 import logging
 
 # from gnuplot_advanced import GnuplotSnippet, GnuplotController, interaction_demo, _flatten_to_tuple_of_strings  # public sees this. Must match gnuplot_advanced/__init__.el
-from gnuplot_advanced.core import GnuplotSnippet, GnuplotController, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
+from gnuplot_advanced.snippet import GnuplotSnippet, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
+from gnuplot_advanced.controller import GnuplotController, interaction_demo, _flatten_to_tuple_of_strings  # developer deeper access
 
 # ##############################################################
 logger = logging.getLogger("test")

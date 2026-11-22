@@ -11,6 +11,7 @@ packages = [{ include = "gnuplot_advanced" }]
 python = "^3.10"
 # NOTE: Put this in the consuming project toml gnuplot-advanced = {path = "../Gnuplot_Advanced", develop = true}
 # and/or run from consumer poetry shell for example: poetry add --editable ../Gnuplot_Advanced
+pandas = "^2.2.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.0"  # Optional for testing

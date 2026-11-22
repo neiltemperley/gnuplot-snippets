@@ -113,7 +113,7 @@ def _clean_cmds(*set_cmds) -> str:
     Attempts to comment out any "pause XXX" gnuplot commands of user because
     the GnuplotController will handle the pause workflow.
     :raises TypeError: if any argument is not a string
-    :returns: cleaned up command string
+    :returns: cleaned up command string always ending with a newline unless empty.
     """
     lines: list[str] = []
     for cmd in set_cmds:
@@ -139,6 +139,64 @@ class GnuplotSnippet():
     FIXME XXXX
     The goal is to provide flexible unrestricted access to all gnuplot's capabilities from python.
     These methods require you to know how to create valid gnuplot commands.
+
+    Helper class for constructing and managing Gnuplot command snippets for use
+    with a GnuplotController. Supports publishing to file or screen, multiplot
+    workflows, and custom terminal/output setup.
+
+    Typical usage (see individual methods for details):
+
+        # Initialize snippets with a class method
+        gs = GnuplotSnippet()
+
+        # Define scaled axes for undistorted 2D plot
+        gs.preplot(
+            '# Set variables for axis scaling:',
+            'if (!exists("XMIN") || !exists("XRANGE")) { XMIN=0.0; XRANGE=1.0 }',
+            'if (!exists("YMIN") || !exists("YRANGE")) { YMIN=0.0; YRANGE=1.5 }',
+            'set xrange [XMIN:XMIN+XRANGE]; set yrange [YMIN:YMIN+YRANGE]',
+            'set size ratio YRANGE/XRANGE',
+        )
+
+        # Set terminal for export (e.g., LaTeX-compatible PDF)
+        gs.preplot_to_file(
+            'set terminal cairolatex color pdf size 5.0,(5.0*YRANGE/XRANGE) lw 2.0',
+            'figure.tex'
+        )
+
+        # Optional extras (labels, format)
+        gs.preplot_to_file_extras(
+            'set xlabel "$x$ [-]"; set format x "$%G$"',
+            'set ylabel "$y$ [-]"; set format y "$%G$"',
+        )
+
+        # return gs #  when done.
+
+        # Outside the class
+        gs = object.gnuplot()  # get the snippet from the object
+    
+        gc = GnuplotController()
+        # Run the actual plotting sequence
+        gc.preplot(
+            gs.preplot(),
+            gs.preplot_to_file(),
+            gs.preplot_to_file_extras()
+        )
+        gc.plot(gs.plot_elements(), pause=0)  # Export to file
+        gc.postplot(gs.postplot())
+
+        # Switch back to screen display
+        gc.preplot(gs.preplot_to_screen())
+        gc.plot(gs.plot_elements(), pause=-1)  # replot
+        gc.postplot(gs.postplot())
+    
+        gc.close()
+
+    Notes:
+        - `preplot_to_file()` is ignored during active multiplot sessions.
+        - Use `preplot()` for geometry setup and scaling.
+        - Use `preplot_to_screen()` to switch from file output back to interactive display.
+    
     Usage: Call these to assemble gnuplot command strings
      this_object.preplot_miscellaneous("# e.g. function definitions go here")
      this_object.add_dataframe_to_preplot_miscellaneous(dataframe, "$ValidDataBlockName") # use if required
@@ -159,10 +217,11 @@ class GnuplotSnippet():
         Note: If its multiline each line must begin with Gnuplot comment char "# ".
         """
         # These are gnuplot command snippets
-        # self.__terminal: str = ""  # set terminal and terminal-related commands
         self.__preplot: str = f'# {comment}\n' if comment else ""  # set and unset commands to process before plotting
         self.__plot_elements: tuple = ()  # plot elements for the next plot command in a more convenient form for altering.
         self.__postplot: str = ""  # set and unset commands to process after plotting
+        self.__preplot_to_screen = ""  # set terminal and related commands for screen
+        self.__preplot_to_file = ""  # set terminal and related commands for publishing to a file
         return
 
     def __str__(self) -> str:
@@ -202,6 +261,51 @@ class GnuplotSnippet():
             'output = ""\n',  # take some precautions
             _clean_cmds(*set_cmds),  # set terminal and output
             show_source=False)
+
+    def preplot_to_file(self, set_terminal_cmd: str | None = None, filename: str | None = None, *cmds: str, show_source: bool = True) -> str:
+        """Save and/or get command to 'set output "filename"' and 'set terminal...' used for printing/publishing.
+
+        Optionally includes extra Gnuplot commands specific to publishing to a file, (e.g. labels,  axis formatting).
+
+        See class docstring for usage examples.
+        
+        Usage: Example published in LaTeX using GnuplotSnippet gs:
+         gs.preplot_to_file('set terminal cairolatex color pdf size 5.0,5.0*0.7 lw 2.0',
+                    'filename.tex', 'set title', # clear title
+                    'set xlabel "$x$ [-]"; set format x "$%G$"',
+                    'set ylabel "$y$ [-]"; set format y "$%G$"',)
+        
+        :param set_terminal_cmd: Gnuplot command string to set terminal.
+        :param filename: Output file name.
+        :param cmds: Additional Gnuplot command lines specific to publishing, e.g. 'set xlabel "$x$ [-]"; set format x "$%G$"',
+        :param show_source: If True, prepend a comment with caller of this method's details.
+        :returns: Preplot command string to direct output to file.
+        """
+        if (set_terminal_cmd is None) != (filename is None):
+            raise ValueError("Either both 'set_terminal_cmd' and 'filename' must be provided, or neither.")
+
+        if set_terminal_cmd and filename:
+            snippet_source = f'# {_source()}\n' if show_source else ""
+            extra_cmds = _clean_cmds(*cmds) if cmds else ""
+            self.__preplot_to_file = (snippet_source + f'if(!GPVAL_MULTIPLOT) {{\n  set output "{filename}"\n  {set_terminal_cmd}\n}}\n{extra_cmds}')
+        return self.__preplot_to_file
+
+    def preplot_to_screen(self, set_terminal_cmd: str | None = None, *cmds: str, show_source: bool = True) -> str:
+        """Save and/or get commands to 'unset output' and 'set terminal ...' for the screen.
+
+        You can ignore using this if you are happy with the screen default.
+
+        :param set_terminal_cmd: Gnuplot command string to set terminal.
+        :param cmds: Additional Gnuplot command lines specific to screen view.
+        :param show_source: If True, prepend a comment with caller of this method's details.
+        :returns: Preplot command string to direct output to screen.
+        """
+        if set_terminal_cmd:
+            snippet_source = f'# {_source()}\n' if show_source else ""
+            extra_cmds = _clean_cmds(*cmds) if cmds else ""
+            # Multiplot doesn't want to see new terminal definitions
+            self.__preplot_to_screen = snippet_source + f'if(!GPVAL_MULTIPLOT) {{\n  set output\n  {set_terminal_cmd}\n}}\n{extra_cmds}'
+        return self.__preplot_to_screen
 
     def preplot(self, *set_cmds, reset: bool = False, show_source: bool = True) -> str:
         """Append one or more lines to the preplot snippet to be sent to gnuplot before plotting.
