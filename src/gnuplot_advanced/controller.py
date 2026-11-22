@@ -1,45 +1,57 @@
+# Copyright (c) 2025-2026 Neil Temperley
+# SPDX-License-Identifier: MIT
+# See the LICENSE file in the project root for full license text.
+# https://github.com/neiltemperley/gnuplot_advanced
 """Flexible unrestricted tools for Gnuplot integration with Python."""
 import logging
-# import pdb  # python debugger. Useful are: pdb.post_mortem() and import pdb; pdb.set_trace() will launch pdb at this spot.
-# import os
-# import sys
 import subprocess
 import time
 from datetime import datetime
+import shutil
 
-from .snippet import _clean_cmds, _flatten_to_tuple_of_strings, _source
+from .snippet import _clean_cmds, _flatten_to_tuple_of_strings, _source, _extract_set_terminal_cmd
 
-# from pprint import pformat, pprint
-# from objexplore import explore  # type: ignore # e.g. explore(object) # VERY GOOD pip install objexplore
 # ##############################################################
 logger = logging.getLogger("gnuplot_advanced")
-logger.setLevel(logging.DEBUG)  # Set default logging level # DEBUG, INFO, WARNING, ERROR
-#
-# Create a formatter and attach it to the handler
-# formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-formatter = logging.Formatter("%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
-#
 # Output to console:
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-
+handler = logging.StreamHandler()
+formatter = logging.Formatter(
+    "%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.ERROR)  # INFO, DEBUG, WARNING, ERROR
 # ##############################################################
+
+
+class GnuplotNotFoundError(RuntimeError):
+    pass
+
+
 class GnuplotError(Exception):
     """Base class for exceptions in the Gnuplot plotting library."""
     pass
+
+
+def _find_gnuplot(executable: str = "gnuplot") -> str:
+    """Return the full path to gnuplot, or raise a clear error."""
+    path = shutil.which(executable)
+    if path is None:
+        raise GnuplotNotFoundError(
+            f"Could not find '{executable}'."
+            "Install gnuplot (e.g. On linux 'sudo apt install gnuplot') and check you can run it from the terminal command prompt."
+        )
+    return path
 
 
 class GnuplotController:
     """Control creation and display of gnuplot plots."""
 
     def __init__(self, debug: bool = False, script_filename: str = ""):
+        self.gnuplot_path = _find_gnuplot()
         """Open Gnuplot as a subprocess."""
         # Start gnuplot process
         self.gnuplot = subprocess.Popen(
-            ['gnuplot'],  # don't want -persistent switch!
+            [self.gnuplot_path],  # don't want -persistent switch!
             stdin=subprocess.PIPE,
             #stdout=subprocess.PIPE,
             #stderr=subprocess.PIPE,
@@ -54,9 +66,10 @@ class GnuplotController:
         self.script_filename = script_filename
 
     def cmd(self, gnuplot_str: str, show_source=False):
-        """Send command str to Gnuplot ensuring a newline termination."""
+        """Send a command str to Gnuplot ensuring a newline termination."""
         cmd_source: str = f'# {_source(is_snippet=False)}\n' if show_source else ""
-        gnuplot_str = gnuplot_str.rstrip() + "\n"  # ensure a newline termination
+        gnuplot_str = gnuplot_str.rstrip(
+        ) + "\n"  # ensure a newline termination
         self.script += cmd_source + gnuplot_str
         if self.gnuplot.stdin is not None:
             self.gnuplot.stdin.write(gnuplot_str)
@@ -72,19 +85,52 @@ class GnuplotController:
         cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
         self.cmd(_clean_cmds(cmd_source, *cmds))
 
-    def premultiplot(self, set_terminal_cmd: str, set_multiplot_cmd: str, show_source=False):
+    def premultiplot_to_file(self,
+                             *set_cmds: str,
+                             filename: str | None = None,
+                             show_source: bool = True) -> None:
         """Send 'set terminal' and matching 'set multiplot' cmds to begin a multiplot.
 
-        Note: Once premultiplot() is called, all 'set terminal' commands in snippets are blocked until an
-        'unset multiplot' is sent by calling postmultiplot().
-        Usage: when plotting using GnuplotController gc :
+        Note: Once premultiplot() is called, all 'set terminal' commands in snippets are helpfully bblocked until an
+              'unset multiplot' is sent by calling postmultiplot().
+        
+        # Usage: when gc = GnuplotController():
+         gc.premultiplot('set terminal qt 1000,1000 title "Multiplot"', 'set multiplot layout 1,2', filename='file.tex')
+         # ...various...preplot(), and plot() and postplot() commands for each plot come next
+         # Finally...
+         gc.postmultiplot()
+       """
+        cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
+        set_terminal_cmd, _ = _extract_set_terminal_cmd(*set_cmds)
+        if (set_terminal_cmd is None) != (filename is None):
+            raise ValueError(
+                "Both a 'set terminal ...' command and 'filename' "
+                "must be provided.")
+        self.cmd(_clean_cmds(cmd_source, 'unset multiplot', *set_cmds))
+
+    def premultiplot_to_screen(self,
+                               *set_cmds: str,
+                               show_source: bool = True) -> None:
+        """Send 'set terminal' and matching 'set multiplot' cmds to begin a multiplot.
+        
+        Note: Once premultiplot() is called, all 'set terminal' commands in snippets are helpfully blocked until an
+              'unset multiplot' is sent by calling postmultiplot().
+        
+        # Usage: when gc = GnuplotController():
          gc.premultiplot('set terminal qt 1000,1000 title "Multiplot"', 'set multiplot layout 1,2')
          # ...various...preplot(), and plot() and postplot() commands for each plot come next
          # Finally...
-         gc.postmultiplot()  # Important to unblock 'set terminal' commands in snippets.
+         gc.postmultiplot()
        """
         cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
-        self.cmd(cmd_source + f'unset multiplot\n{set_terminal_cmd}\n{set_multiplot_cmd}\n')
+        set_terminal_cmd, _ = _extract_set_terminal_cmd(*set_cmds)
+        if (set_terminal_cmd is None):
+            raise ValueError(
+                "Must have a screen 'set terminal ' command, e.g. 'set terminal qt'."
+            )
+        self.cmd(
+            _clean_cmds(cmd_source, 'set output', 'unset multiplot',
+                        *set_cmds))
 
     def postmultiplot(self, *cmds: str, show_source=False):
         """Send 'unset multiplot' plus other cmds to cleanup after a multiplot.
@@ -95,7 +141,12 @@ class GnuplotController:
         cmd_source = f'# {_source(is_snippet=False)}\n' if show_source else ""
         self.cmd(_clean_cmds(cmd_source, 'unset multiplot', *cmds))
 
-    def plot(self, *plot_elements, pause: int | str = 0, plot_and_ranges: str = "plot", show_output: bool = True, show_source: bool = False):
+    def plot(self,
+             *plot_elements,
+             pause: int | str = 0,
+             plot_and_ranges: str = "plot",
+             show_output: bool = True,
+             show_source: bool = False):
         """Build and send the plot command and pause option to Gnuplot.
 
         Showing the plot maintains synchronisation between the gnuplot plot window
@@ -141,14 +192,18 @@ class GnuplotController:
                 quit()  # better for interactive
             elif user_input in {"", "n", "next"}:
                 pass  # no change
-            elif user_input in {"c", "continue", "f", "forward", "ff", "r", "run"}:
+            elif user_input in {
+                    "c", "continue", "f", "forward", "ff", "r", "run"
+            }:
                 print("Python: Fast forward through all plots!")
                 self.pause_override = 0
             else:
                 try:
                     new_pause = int(user_input)
                     self.pause_override = new_pause
-                    print(f"Python: Sleep for following plots is set to = {self.pause_override}.")
+                    print(
+                        f"Python: Sleep for following plots is set to = {self.pause_override}."
+                    )
                 except ValueError:
                     # No change
                     print("Python: Unrecognised response.  Continuing...")
@@ -158,16 +213,18 @@ class GnuplotController:
         """Mimic Gnuplot's pause functionality in Python based on pause option.
 
         Note:
-        Gnuplot can't see keypresses so "pause key" can't be used.
-        python can't see  gnuplot mouse clicks so "pause mouse" also won't work.
-        These work: "pause -1", "pause 0" etc.
+        - Gnuplot can't see keypresses so "pause key" can't be used.
+        - python can't see  gnuplot mouse clicks so "pause mouse" also won't work.
+        - These work: "pause -1", "pause 0" etc.
         :param pause_option: "mouse_measure OR Gnuplot pause values -1, 0, 1, 3, etc.
         """
         user_input = ""
         if pause_option == "mouse_measure":
             self.cmd(self._mouse_measurement_cmds())
             # print("Python: Mouse measure commands added to script log.\nRun script from gnuplot manually from a terminal.")
-            user_input = input("Python: Mouse Measurements! Next keypress must be in gnuplot window!\n")
+            user_input = input(
+                "Python: Mouse Measurements! Next keypress must be in gnuplot window!\n"
+            )
         elif pause_option == "mouse":
             print(
                 f"Python: Option \"{pause_option}\" to gnuplot pause won't work as expected.\nTo get these to work you must run the script within gnuplot!  Try -1 instead."
@@ -175,15 +232,20 @@ class GnuplotController:
             input("Python: Press Enter to continue...\n")  # Wait for keypress
         elif isinstance(pause_option, int):
             if pause_option < 0:
-                user_input = input("Python: Press Enter to continue (or 'q' to quit, 'f' for fast forward, 'N' for N sec delays):...\n")
+                user_input = input(
+                    "Python: Press Enter to continue (or 'q' to quit, 'f' for fast forward, 'N' for N sec delays):...\n"
+                )
                 if self.gnuplot.stdin is not None:
                     self.gnuplot.stdin.write("\n")  # gnuplot needs a char!
                     self.gnuplot.stdin.flush()
             else:
                 print(f"Python: Pausing for {pause_option} seconds...")
-                time.sleep(pause_option)  # Wait for a specified number of seconds
+                time.sleep(
+                    pause_option)  # Wait for a specified number of seconds
         else:
-            print(f"Python: Invalid pause option = \"{pause_option}\". Try pause=\"mouse_measure\" or Gnuplot standard pause integer values: -1, 0, 3, etc. ")
+            print(
+                f"Python: Invalid pause option = \"{pause_option}\". Try pause=\"mouse_measure\" or Gnuplot standard pause integer values: -1, 0, 3, etc. "
+            )
         return user_input
 
     def close(self):
@@ -223,10 +285,10 @@ class GnuplotController:
         return r"""
             # gnuplot script to do measurements with the mouse. Neil Temperley 2025-04-29
             # Esc or Enter to exit loop
-            pause mouse keypress "\nGnuplot: Press 'm' key in plot window to change mouse buttons to measure deltas and gradients,\n otherwise press Esc or Enter in plot window to quit..."
+            pause mouse keypress "\nGnuplot: Press 'm' key in plot window to change mouse buttons to measure deltas and gradients,\n otherwise press Esc or Enter in plot window to quit measurement..."
             while (1) {
                 if (MOUSE_KEY == 27 || MOUSE_KEY == 10 || MOUSE_KEY == 13) {  # 27 = Esc or Enter to exit
-                    print "\nGnuplot: Press enter here (in terminal window) to continue..."
+                    print "\nGnuplot: Now press Enter here (in terminal window) to continue..."
                     break
                 }
                # print MOUSE_KEY

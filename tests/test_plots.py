@@ -6,11 +6,13 @@ from gnuplot_advanced.controller import GnuplotController, interaction_demo, _fl
 
 # ##############################################################
 logger = logging.getLogger("test")
-logger.setLevel(logging.DEBUG)  # Set default logging level # DEBUG, INFO, WARNING, ERROR
+logger.setLevel(
+    logging.DEBUG)  # Set default logging level # DEBUG, INFO, WARNING, ERROR
 #
 # Create a formatter and attach it to the handler
 # formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-formatter = logging.Formatter("%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
+formatter = logging.Formatter(
+    "%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
 #
 # Output to console:
 console_handler = logging.StreamHandler()
@@ -29,10 +31,15 @@ logger.addHandler(console_handler)
 
 @pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
 def test_flatten_to_tuple_of_strings():
-    logger.debug("Args        \t= \"{}\"".format(_flatten_to_tuple_of_strings("Arg1", "Arg2", "Arg3")))
-    logger.debug("Tuple       \t= \"{}\"".format(_flatten_to_tuple_of_strings(("Arg1", "Arg2", "Arg3"))))
-    logger.debug("Lone String \t= \"{}\"".format(_flatten_to_tuple_of_strings("Arg1")))
-    logger.debug("Tuple + Tuple, Lone String \t= \"{}\"".format(_flatten_to_tuple_of_strings(("Arg1", "Arg2", "Arg3") + ("Arg1", "Arg2", "Arg3"), "Arg1")))
+    logger.debug("Args        \t= \"{}\"".format(
+        _flatten_to_tuple_of_strings("Arg1", "Arg2", "Arg3")))
+    logger.debug("Tuple       \t= \"{}\"".format(
+        _flatten_to_tuple_of_strings(("Arg1", "Arg2", "Arg3"))))
+    logger.debug("Lone String \t= \"{}\"".format(
+        _flatten_to_tuple_of_strings("Arg1")))
+    logger.debug("Tuple + Tuple, Lone String \t= \"{}\"".format(
+        _flatten_to_tuple_of_strings(
+            ("Arg1", "Arg2", "Arg3") + ("Arg1", "Arg2", "Arg3"), "Arg1")))
     assert True
     return
 
@@ -40,7 +47,7 @@ def test_flatten_to_tuple_of_strings():
 # @pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
 def test_snippets():
     gs1 = GnuplotSnippet()
-    gs1.output_to_screen(set_terminal_cmd='set term qt')
+    gs1.output_to_screen("set term qt")
     gs1.preplot("""
     set angle degrees
     set xrange[0:360]
@@ -52,7 +59,7 @@ def test_snippets():
     # print(f"gss = {gs1}")
     #
     gs2 = GnuplotSnippet()
-    gs2.output_to_screen(set_terminal_cmd='set term qt')
+    gs2.output_to_screen('set term qt')
     gs2.preplot("""
     set angle degrees
     set xrange[0:360]
@@ -88,7 +95,9 @@ def test_run_script_available():
 def test_comment_out_pause():
     # interaction_demo()
     gc = GnuplotController(debug=True)
-    gc.preplot('plot sin(x);pause -1 "Hello"; print("Goodbye")\npause mouse "This is a test"\npause 10\n', 'pause -1 "Second Line"')
+    gc.preplot(
+        'plot sin(x);pause -1 "Hello"; print("Goodbye")\npause mouse "This is a test"\npause 10\n',
+        'pause -1 "Second Line"')
     gc.close()
     #assert callable(run_script)
     #assert callable(run_script)

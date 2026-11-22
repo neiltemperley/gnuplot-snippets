@@ -1,24 +1,25 @@
+# Copyright (c) 2025-2026 Neil Temperley
+# SPDX-License-Identifier: MIT
+# See the LICENSE file in the project root for full license text.
+# https://github.com/neiltemperley/gnuplot_advanced
 """Flexible unrestricted tools for Gnuplot integration with Python."""
 import inspect
 import logging
 import re
-# from numpy import iterable
 import pandas as pd
-# from objexplore import explore  # type: ignore # e.g. explore(object) # VERY GOOD pip install objexplore
+
 # ##############################################################
 logger = logging.getLogger("gnuplot_advanced")
-logger.setLevel(logging.DEBUG)  # Set default logging level # DEBUG, INFO, WARNING, ERROR
-#
-# Create a formatter and attach it to the handler
-# formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-formatter = logging.Formatter("%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
-#
 # Output to console:
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+handler = logging.StreamHandler()
+formatter = logging.Formatter(
+    "%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.ERROR)  # INFO, DEBUG, WARNING, ERROR
 # ##############################################################
+
+_TERMINAL_RE = re.compile(r"^\s*set\s+term[inal]*\b", re.IGNORECASE)
 
 _gnuplot_datablock_counter: int = 0  # used to ensure unique datablock names.
 
@@ -42,11 +43,12 @@ def escape_str(s: str) -> str:
     return s.replace('_', '\\\\_')
 
 
-def format_dataframe(dataframe: pd.DataFrame, formatter: dict[str, str] = {}) -> str:
+def format_dataframe(dataframe: pd.DataFrame,
+                     formatter: dict[str, str] = {}) -> str:
     """Convert a dataframe to neat readable columns also suitable for a Gnuplot datablock or datafile.
 
     Useful for visual examination of data.
-    Note: This assumes the column names are shorter than or equal to the field widths provided in formatter.
+    Note: This assumes the column names are shorter than, or equal to, the field widths provided in formatter.
           So increase the field widths if necessary.
     Note: If no formatter is provided numbers are formatted according to pandas with better but imperfect
     alignment of columns to data; OR If the same format for all columns is acceptable, omit formatter
@@ -69,13 +71,34 @@ def format_dataframe(dataframe: pd.DataFrame, formatter: dict[str, str] = {}) ->
         if col in formatted_map:  #... ignore unknown keys
             formatted_df[col] = dataframe[col].map(formatted_map[col])
         else:
-            formatted_df[col] = dataframe[col].map(lambda x: f"{x:}")  # default formats of pandas
+            formatted_df[col] = dataframe[col].map(
+                lambda x: f"{x:}")  # default formats of pandas
     # Format header row to align to columns:
     header = ""
     first_row = formatted_df.iloc[0]
     for col, val in first_row.items():
         header += f"{col:>{len(val)}}\t"
-    return header + "\n" + formatted_df.to_csv(header=False, index=False, sep="\t")
+    return header + "\n" + formatted_df.to_csv(
+        header=False, index=False, sep="\t")
+
+
+def _extract_set_terminal_cmd(*set_cmds: str) -> tuple[str | None, list[str]]:
+    """Find 'set terminal ...' command(s) if it exists.
+    :param set_cmds: Gnuplot commands
+    :returns: tuple of set terminal command, list of remaining commands.
+    """
+    # Each arg may hold several commands separated by newlines.
+    lines = [
+        line.strip() for cmd in set_cmds  #
+        for line in cmd.splitlines() if line.strip()
+    ]
+    term_idx = [i for i, ln in enumerate(lines) if _TERMINAL_RE.match(ln)]
+    if len(term_idx) > 1:
+        terms = [lines[idx] for idx in term_idx]
+        raise ValueError(
+            f"More than one 'set terminal' command given: {terms}.")
+    set_terminal_cmd = lines.pop(term_idx[0]) if term_idx else None
+    return set_terminal_cmd, lines
 
 
 def _source(note="", is_snippet=True) -> str:
@@ -86,7 +109,8 @@ def _source(note="", is_snippet=True) -> str:
     :param is_snippet: True if called from a GnuplotSnippet method else GnuplotController
     :returns: Source string to write to Gnuplot script file.
     """
-    frame = inspect.currentframe().f_back.f_back  # caller's caller. # pyright: ignore
+    frame = inspect.currentframe(
+    ).f_back.f_back  # caller's caller. # pyright: ignore
     if frame is not None:
         filename = frame.f_code.co_filename
         lineno = frame.f_lineno
@@ -124,7 +148,8 @@ def _check_cmd(cmd):
                 f"Expected string, got {type(cmd).__name__}: {cmd!r}.\nPerhaps you sent a snippets object to preplot()? To add a snippet use the snippets' append() method."
             )
         else:
-            raise TypeError(f"Expected a string; got {type(cmd).__name__}: {cmd!r}.")
+            raise TypeError(
+                f"Expected a string; got {type(cmd).__name__}: {cmd!r}.")
     return
 
 
@@ -139,17 +164,11 @@ def _clean_cmds(*set_cmds) -> str:
     lines: list[str] = []
     for cmd in set_cmds:
         _check_cmd(cmd)
-        # if not isinstance(cmd, str):
-        #     if type(cmd).__name__ == "GnuplotSnippet":
-        #         raise TypeError(
-        #             f"Expected string, got {type(cmd).__name__}: {cmd!r}.\nPerhaps you sent a snippets object to preplot()? To add a snippet use the snippets' append() method."
-        #         )
-        #     else:
-        #         raise TypeError(f"Expected a string; got {type(cmd).__name__}: {cmd!r}.")
         for line in cmd.splitlines():
             # logger.debug("line     \t= \"{}\"".format(line))
             # Replace 'pause -1', 'pause mouse' with '# pause 0' etc.
-            new_line = re.sub(r'\bpause\s+(-?\d+|mouse)([^;\n]*)[;]*', r'# pause \1\2\n', line)
+            new_line = re.sub(r'\bpause\s+(-?\d+|mouse)([^;\n]*)[;]*',
+                              r'# pause \1\2\n', line)
             # logger.debug("new_line \t= \"{}\"".format(new_line))
             lines.append(new_line.rstrip())
     return "\n".join(lines) + "\n" if len(lines) > 0 else ""
@@ -162,9 +181,11 @@ class GnuplotSnippet():
     with a GnuplotController. Supports datablocks, datafiles, publishing to file or screen, multiplot
     workflows, and custom terminal/output setup.
 
-    Typical usage (see individual methods for details):
+    # Typical usage (see individual methods for details):
 
-        # Initialize snippets with a class method
+      # Inside class MyClass:
+      def gnuplot()
+        # Initialize:
         gs = GnuplotSnippet()
 
         # Define scaled axes for undistorted 2D plot
@@ -178,31 +199,30 @@ class GnuplotSnippet():
 
         # Set terminal for export (e.g., LaTeX-compatible PDF)
         gs.output_to_file(
-                    set_terminal_cmd='set terminal cairolatex color pdf size 5.0,5.0*0.7 lw 2.0',
-                    filename='output_filename.tex',
+                    'set terminal cairolatex color pdf size 5.0,5.0*0.7 lw 2.0',
                     'set xlabel "$x$ [-]"; set format x "$%G$"',
                     'set ylabel "$y$ [-]"; set format y "$%G$"',
+                    filename='output_filename.tex',
         )
+        return gs
 
-        # return gs #  when done.
-
-        # Outside the class
-        gs = object.gnuplot()  # get the snippet from some class object of yours
+        # Then elsewhere:
+        my_object = MyClass() 
+        gs = my_object.gnuplot()  # get the snippets
     
         gc = GnuplotController()
-        # Run the actual plotting sequence
         gc.preplot(
             gs.preplot(),
             gs.output_to_file(),
         )
         gc.plot(gs.plot_elements(), pause=0)  # Export to file
         gc.postplot(gs.postplot())
-        #
+        
         # Switch back to screen display
         gc.preplot(gs.output_to_screen())
         gc.plot(gs.plot_elements(), pause=-1)  # re plot the above to screen
         gc.postplot(gs.postplot())
-        #
+        
         gc.close()
 
     Notes:
@@ -215,8 +235,8 @@ class GnuplotSnippet():
      gs.preplot("# e.g. function definitions go here")
      gs.preplot_add_dataframe(dataframe, "$ValidDataBlockName") # use if required
      gs.preplot("# e.g. set title, xrange etc")
-     gs.plot_elements('# Assemble lines minus the plot command e.g. "$ValidDataBlockName using 2:3" OR "sin(x)" go here')
-     gs.postplot("# Any post plot commands go here e.g. mouse interaction go here")
+     gs.plot_elements('# Plot lines minus the plot command e.g. "$ValidDataBlockName using 2:3" OR "sin(x)" go here')
+     gs.postplot("# Any post plot commands go here e.g. mouse interaction goes here")
     """
 
     def __init__(self, comment: str = "", debug: bool = False) -> None:
@@ -228,7 +248,8 @@ class GnuplotSnippet():
         """
         # These are Gnuplot command snippets:
         self.__preplot: str = f'# {comment}\n' if comment else ""  # set and unset commands to process before plotting
-        self.__plot_elements: tuple = ()  # plot elements for the next plot command in a more convenient form for altering.
+        self.__plot_elements: tuple = (
+        )  # plot elements for the next plot command in a more convenient form for altering.
         self.__postplot: str = ""  # set and unset commands to process after plotting
         self.__preplot_to_screen: str = ""  # set terminal and related commands for screen
         self.__preplot_to_file: str = ""  # set terminal and related commands for publishing to a file
@@ -247,16 +268,19 @@ class GnuplotSnippet():
         # s += ' = """{}"""\n'.format()
         return s
 
-    def output_to_file(self, *set_cmds: str, filename: str | None = None, show_source: bool = True) -> str:
+    def output_to_file(self,
+                       *set_cmds: str,
+                       filename: str | None = None,
+                       show_source: bool = True) -> str:
         """Save and/or get 'set terminal ...' and related commands for printing/publishing.
 
-        Optionally includes extra Gnuplot commands specific to publishing to a file, (e.g. labels,  axis formatting).
+        Usually includes extra Gnuplot commands specific to publishing to a file, (e.g. labels,  axis formatting).
 
-        - To set the terminal the first arg must be "set terminal ....", then other related screen-related args can follow.
+        - Usually the appropriate "set terminal ....", should be in set_cmds.
         - The last arg is the filename, e.g. filename='output_filename.tex'
-        - With no args returns the Gnuplot commands to direct output to a file.
+        - With no args this method returns the Gnuplot commands to direct output to a file.
         
-        Usage Example: Publishing in LaTeX:
+        # Usage Example: Publishing in LaTeX:
          gs = GnuplotSnippet()
          gs.output_to_file(
                     'set terminal cairolatex color pdf size 5.0,5.0*0.7 lw 2.0',
@@ -269,23 +293,28 @@ class GnuplotSnippet():
          gc = GnuplotController() 
          gc.preplot(gs.output_to_file(), gs.preplot())
          gc.plot(gs.plot_elements())  # write plot to file
-         # gc.postplot(gs.postplot()) # [You may need to add this to clean up LaTeX specific settings.]
+         # gc.postplot(gs.postplot()) # any clean up commands
          gc.preplot(gs.output_to_screen()) # explicitly direct output to screen
-         gc.plot(gs.plot_elements(), pause=-1) # show plot on screen
+         gc.plot(gs.plot_elements(), pause=-1) # plot to screen
          gc.close()
         #
-        :param set_cmds: "set terminal ..." then any additional Gnuplot command lines specific to publishing, e.g. 'set xlabel "$x$ [-]"; set format x "$%G$"',
+        :param set_cmds: Gnuplot set commands, one per argument. Each may itself contain several commands separated by newlines.
+         In this case, usually "set terminal ..." then any additional Gnuplot command lines specific to publishing, e.g. 'set xlabel "$x$ [-]"; set format x "$%G$"',
         :param filename: Output file name.
         :param show_source: If True, prepend a comment with caller of this method's details.
         :returns: Preplot command string to direct output to file.
         """
         if not set_cmds:
             return self.__preplot_to_file
-        cmds = list(set_cmds)  # make it mutable so we can isolate the "set terminal ..."
-        set_terminal_cmd = cmds.pop(0)
-        _check_cmd(set_terminal_cmd)  # simple validity check.
+
+        set_terminal_cmd, cmds = _extract_set_terminal_cmd(*set_cmds)
         if (set_terminal_cmd is None) != (filename is None):
-            raise ValueError("Either both a first arg 'set terminal...' command and 'filename' must be provided, or neither.")
+            raise ValueError(
+                "Either both a 'set terminal ...' command and 'filename' "
+                "must be provided, or neither.")
+        if set_terminal_cmd is not None:
+            _check_cmd(set_terminal_cmd)  # simple validity check.
+
         debug_output = ""
         if self.is_debug and filename and set_terminal_cmd:
             escaped_filename = filename.replace('"', '\\"')
@@ -295,19 +324,23 @@ class GnuplotSnippet():
             snippet_source = f'# {_source()}\n' if show_source else ""
             extra_cmds = _clean_cmds(*cmds) if cmds else ""
             # Multiplot doesn't want to see any new terminal definitions
-            self.__preplot_to_file = (snippet_source +
-                                      f'if(!GPVAL_MULTIPLOT) {{\n  set output "{filename}"\n  {set_terminal_cmd}\n{debug_output}}}\n{extra_cmds}')
+            self.__preplot_to_file = (
+                snippet_source +
+                f'if(!GPVAL_MULTIPLOT) {{\n  set output "{filename}"\n  {set_terminal_cmd}\n{debug_output}}}\n{extra_cmds}'
+            )
         return self.__preplot_to_file
 
-    def output_to_screen(self, *set_cmds: str, show_source: bool = True) -> str:
+    def output_to_screen(self,
+                         *set_cmds: str,
+                         show_source: bool = True) -> str:
         """Save and/or get 'set terminal ...' and related commands for screen output
 
         - To set the terminal the first arg must be "set terminal ....", then other related screen-related args can follow.
-        - With no args returns the Gnuplot commands to direct output to screen..
+        - With no args this method returns the Gnuplot commands to direct output to screen..
         
         This will also clear the output with "set output".
         
-        Usage Example: 
+        # Usage Example:
          gs = GnuplotSnippet()
          gs.output_to_screen("set terminal qt size 800,800", show_source=True)
          gs.plot_elements('cos(x)', 'sin(x)')
@@ -324,9 +357,13 @@ class GnuplotSnippet():
         """
         if not set_cmds:
             return self.__preplot_to_screen
-        cmds = list(set_cmds)  # make it mutable so we can isolate the "set terminal ..."
-        set_terminal_cmd = cmds.pop(0)
-        _check_cmd(set_terminal_cmd)  # simple validity check.
+        set_terminal_cmd, cmds = _extract_set_terminal_cmd(*set_cmds)
+        if (set_terminal_cmd is None):
+            raise ValueError(
+                "Must have a 'set terminal ' command, e.g. 'set terminal qt'.")
+        else:
+            _check_cmd(set_terminal_cmd)  # simple validity check.
+
         debug_output = ""
         if self.is_debug:  # and set_terminal_cmd:
             escaped_cmd = set_terminal_cmd.replace('"', '\\"')
@@ -337,7 +374,10 @@ class GnuplotSnippet():
         self.__preplot_to_screen = snippet_source + f'if(!GPVAL_MULTIPLOT) {{\n  set output\n  {set_terminal_cmd}\n{debug_output}}}\n{extra_cmds}'
         return self.__preplot_to_screen
 
-    def preplot(self, *set_cmds, reset: bool = False, show_source: bool = True) -> str:
+    def preplot(self,
+                *set_cmds,
+                reset: bool = False,
+                show_source: bool = True) -> str:
         """Append one or more lines to the preplot snippet to be sent to gnuplot before plotting.
 
         For example, all gnuplot "set" and "unset" commands: title, ranges, labels, arrows etc.
@@ -359,7 +399,7 @@ class GnuplotSnippet():
                               datablock_name: str = "$DataBlock1",
                               formatter: dict[str, str] = {},
                               show_source: bool = True) -> str:
-        """Convert a pandas dataframe to a datablock and append it to the preplot snippet.
+        """Convert a pandas dataframe to a gnuplot datablock and append it to the preplot snippet.
         The dataframe should include column headers.
 
         For more sophisticated plots, e.g. with contours, use preplot_add_datafile().
@@ -396,10 +436,14 @@ class GnuplotSnippet():
         self.__preplot += f'{datablock_name} << EOD\n{content}EOD\n'  # Note: could add '#' before {content} to comment out the column header but not required.
         return self.__preplot
 
-    def preplot_add_datafile(self, datasets: list[pd.DataFrame], datafile: str = "", formatter: dict[str, str] = {}, show_source: bool = True) -> str:
+    def preplot_add_datafile(self,
+                             datasets: list[pd.DataFrame],
+                             datafile: str = "",
+                             formatter: dict[str, str] = {},
+                             show_source: bool = True) -> str:
         """Write a single or "multi-data-set" Gnuplot datafile
         The dataframe(s) should include column headers.
-        Usage Example:
+        # Usage Example:
         gs = GnuplotSnippet()
         gs.preplot('array Set_IDs[3] = ["1st", "2nd", "3rd"]') # we use this gnuplot array when plotting.
         gs.preplot_add_datafile(dfs, datafile=datafile)   # dfs = list[np.dataframe] one per dataset.
@@ -413,9 +457,9 @@ class GnuplotSnippet():
         gc.close()
         #
         Note:
-         set datafile columnheaders # is sent to gnuplot by this method.
+         set datafile columnheaders # is sent to Gnuplot by this method.
         :param datasets: list of pandas DataFrames where each DataFrame is a gnuplot dataset.  Each DataFrame should have column headers.
-        :param datafile: This will create this Gnuplot compatible multi-dataset datafile.
+        :param datafile: This will create this Gnuplot-compatible multi-dataset datafile.
         :param formatter: {} used to optionally format the datafile to be more human readable.
         :param show_source: bool when True prepend a comment indicating caller details of this method.
         :param gnuplot_arrayname: A unique name of Gnuplot array to hold set_ids. Must be unique!
@@ -442,12 +486,12 @@ class GnuplotSnippet():
         """Append one or more Gnuplot "plot element" lines to the plot elements snippet.
         
         Recall (from Gnuplot help), that a plot command for Gnuplot looks like this:
-        plot {<ranges>} <plot-element1> {, <plot-element2>, <plot-element3>}
-       
-        Method accepts either:
-           - Multiple element strings as arguments: plot_elements(plot_element1, plot_element2)
-           - Tuples of plot element strings: plot_elements((plot_element1, plot_element2))
-        Usage Example:
+         plot {<ranges>} <plot-element1> {, <plot-element2>, <plot-element3>}
+        This method accepts either:
+          - Multiple element strings as arguments: plot_elements(plot_element1, plot_element2)
+          - Tuples of plot element strings: plot_elements((plot_element1, plot_element2))
+        
+        # Usage Example:
          gs = GnuplotSnippet()
          gs.plot_elements('cos(x)', 'sin(x) title "Sin Demo" linewidth 2.0')
          gc = GnuplotController() 
@@ -464,13 +508,17 @@ class GnuplotSnippet():
         self.__plot_elements += _flatten_to_tuple_of_strings(plot_elements)
         return self.__plot_elements
 
-    def postplot(self, *post_plot_cmds, defaults: bool = False, reset: bool = False, show_source: bool = True) -> str:
+    def postplot(self,
+                 *post_plot_cmds,
+                 defaults: bool = False,
+                 reset: bool = False,
+                 show_source: bool = True) -> str:
         """Append one or more post_plot_cmds to the postplot snippet to be sent to gnuplot after plotting.
         
         Usually "unset" commands, e.g. unset label; unset arrow; unset multiplot; etc.
         Examples to consider: "unset format x; unset xdata; unset x2tics; unset x2mtics; unset y2mtics;"
         Only required if you want to follow up with another graph without resetting.
-         Usage Example:
+         # Usage Example:
          gs1 = GnuplotSnippet()
          gs1.plot_elements('cos(x)', 'sin(x)')
          gs2 = GnuplotSnippet()
@@ -489,13 +537,15 @@ class GnuplotSnippet():
         :param show_source: bool when True prepend a comment indicating caller details of this method.
         :returns: post plot command string
         """
-        snippet_source = f'# {_source()}\n' if (post_plot_cmds or defaults) and show_source else ""
+        snippet_source = f'# {_source()}\n' if (
+            post_plot_cmds or defaults) and show_source else ""
         if reset:
             self.__postplot = ""  # clear
         default_cmds = ""
         if defaults:
             default_cmds = 'unset label; unset arrow; unset multiplot; set output\n'
-        self.__postplot += snippet_source + default_cmds + _clean_cmds(*post_plot_cmds)
+        self.__postplot += snippet_source + default_cmds + _clean_cmds(
+            *post_plot_cmds)
         return self.__postplot
 
     def append(self, *snippets):
