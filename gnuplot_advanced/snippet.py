@@ -42,17 +42,17 @@ def escape_str(s: str) -> str:
     return s.replace('_', '\\\\_')
 
 
-def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}) -> str:
+def format_dataframe(dataframe: pd.DataFrame, formatter: dict[str, str] = {}) -> str:
     """Convert a dataframe to neat readable columns also suitable for a Gnuplot datablock or datafile.
 
     Useful for visual examination of data.
-    Note: This assumes the column names are shorter than or equal to the field widths provided in format_dict.
+    Note: This assumes the column names are shorter than or equal to the field widths provided in formatter.
           So increase the field widths if necessary.
-    Note: If no format_dict is provided numbers are formatted according to pandas with better but imperfect
-    alignment of columns to data; OR If the same format for all columns is acceptable, omit format_dict
+    Note: If no formatter is provided numbers are formatted according to pandas with better but imperfect
+    alignment of columns to data; OR If the same format for all columns is acceptable, omit formatter
     and try the equivalent of "df = df.map("{:8.2f}".format)" before calling this method.
     :param dataframe: pandas 2D dataframe, e.g. with columns: 'column1', 'column2' etc.
-    :param format_dict: {'column1':'fmt1', 'column2':'fmt2', ...} where 'column1' etc matches dataframe
+    :param formatter: {'column1':'fmt1', 'column2':'fmt2', ...} where 'column1' etc matches dataframe
     column names exactly and 'fmt1' etc is of the python form,
     e.g. '8.2f', '', '5d'.  
     :returns: formatted string.
@@ -62,7 +62,7 @@ def format_dataframe(dataframe: pd.DataFrame, format_dict: dict[str, str] = {}) 
     formatted_df = dataframe.copy()
     # Create map:
     formatted_map = {}
-    for col, fmt in format_dict.items():
+    for col, fmt in formatter.items():
         formatted_map[col] = lambda x, format=fmt: f"{x:{format}}"
     # Convert data to formatted strings:
     for col, val in dataframe.items():
@@ -355,36 +355,48 @@ class GnuplotSnippet():
     def preplot_add_datablock(self,
                               dataframe: pd.DataFrame,
                               datablock_name: str = "$DataBlock1",
-                              format_dict: dict[str, str] = {},
+                              formatter: dict[str, str] = {},
                               show_source: bool = True) -> str:
         """Convert a pandas dataframe to a datablock and append it to the preplot snippet.
+        The dataframe should include column headers.
 
-        For more sophisticated plots, e.g. with contours, you'll need to write your data a gnuplot-compatible
-        formatted file and use the filename in the plot element.
-        :param dataframe: pandas DataFrame
+        For more sophisticated plots, e.g. with contours, use preplot_add_datafile().
+        Usage Example:
+         from gnuplot_advanced import GnuplotSnippet, next_datablock_counter
+         df = pd.DataFrame(points, columns=['x_m', 'y_m'])
+         datablock_name = f'$DataBlock_Profile{next_datablock_counter()}'
+         gs = GnuplotSnippet()
+         gs.preplot_add_datablock(df, datablock_name=datablock_name)
+         gs.plot_elements('{db} using "x_m":"y_m" {title} with linepoints linetype {lt} linewidth {lw}'.format(
+            db=datablock_name,
+            title=f'title "{self.name}"',
+            lt=self.style.get('linetype', 1),
+            lw=self.style.get('linewidth', 1.5),
+          ))
+         gc.preplot(gs.preplot())
+         gc.plot(gs.plot_elements(), pause=-1)
+         gc.postplot(gs.postplot())
+         gc.close()
+        Note:
+         set datafile columnheaders # is sent to gnuplot by this method.
+        :param dataframe: pandas DataFrame with column headers.
         :param datablock_name: str unique valid gnuplot datablock name.  Default is "$DataBlock1".  Use this same name
             when creating the plot_elements()!
-        :param format_dict: {} used to optionally format the block to be more human readable.
+        :param formatter: {} used to optionally format the block to be more human readable.
         :param show_source: bool when True prepend a comment indicating caller details of this method.
 
         :returns: preplot snippet
         """
         snippet_source = f'# {_source()}\n' if show_source else ""
         separator = "\t"  # data separator
-        self.__preplot += snippet_source + f'set datafile separator "{separator}"\n'
-        content = format_dataframe(dataframe, format_dict=format_dict)
-        # content = dataframe.to_csv(header=True, index=False, sep=f"{separator}")  # no extra index column!
-        self.__preplot += f'{datablock_name} << EOD\n# {content}EOD\n'  # Note: '#' is to comment out the column header
+        self.__preplot += snippet_source + f'set datafile separator "{separator}"\nset datafile columnheaders\n'
+        content = format_dataframe(dataframe, formatter=formatter)
+        self.__preplot += f'{datablock_name} << EOD\n{content}EOD\n'  # Note: could add '#' before {content} to comment out the column header but not required.
         return self.__preplot
 
-    def preplot_add_datafile(self,
-                             datasets: list[pd.DataFrame],
-                             set_ids: list[str] | None = None,
-                             datafile: str = "",
-                             format_dict: dict[str, str] = {},
-                             show_source: bool = True,
-                             gnuplot_arrayname: str = "Set_IDs") -> str:
-        """Write a single or "multi-data-set" Gnuplot datafile and create a Gnuplot array of 'Set_IDs' for each dataset.
+    def preplot_add_datafile(self, datasets: list[pd.DataFrame], datafile: str = "", formatter: dict[str, str] = {}, show_source: bool = True) -> str:
+        """Write a single or "multi-data-set" Gnuplot datafile
+        The dataframe(s) should include column headers.
         Usage Example:
         gs = GnuplotSnippet()
         gs.preplot('array Set_IDs[3] = ["1st", "2nd", "3rd"]') # we use this gnuplot array when plotting.
@@ -399,10 +411,10 @@ class GnuplotSnippet():
         gc.close()
         #
         Note:
-         set datafile columnheaders # This command is sent to gnuplot; so columns can optionally be referred to by column headers.
-        :param datasets: list of pandas DataFrames where each DataFrame is a gnuplot dataset.
-        :param datafile: Gnuplot compatible multi-dataset datafile.
-        :param format_dict: {} used to optionally format the datafile to be more human readable.
+         set datafile columnheaders # is sent to gnuplot by this method.
+        :param datasets: list of pandas DataFrames where each DataFrame is a gnuplot dataset.  Each DataFrame should have column headers.
+        :param datafile: This will create this Gnuplot compatible multi-dataset datafile.
+        :param formatter: {} used to optionally format the datafile to be more human readable.
         :param show_source: bool when True prepend a comment indicating caller details of this method.
         :param gnuplot_arrayname: A unique name of Gnuplot array to hold set_ids. Must be unique!
         :returns: preplot snippet
@@ -410,18 +422,18 @@ class GnuplotSnippet():
         snippet_source = f'# {_source()}\n' if show_source else ""
         separator = "\t"  # data separator
         self.__preplot += snippet_source + f'set datafile separator "{separator}"\nset datafile columnheaders\n'
-        if set_ids:
-            # Create a Gnuplot array of dataset ids for possible inclusion in plot titles:
-            n = len(set_ids)
-            values_str = ", ".join(f'\\"{s}\\"' for s in set_ids)
-            array_str = f'array {gnuplot_arrayname}[{n}] = [ {values_str} ]\n'
-            self.__preplot += array_str
-            if self.is_debug:
-                self.__preplot += f'print("GnuplotSnippet DEBUG: Number of datasets = {n} with Set IDs: {array_str}")\n'
+        # if set_ids:
+        #     # Create a Gnuplot array of dataset ids for possible inclusion in plot titles:
+        #     n = len(set_ids)
+        #     values_str = ", ".join(f'\\"{s}\\"' for s in set_ids)
+        #     array_str = f'array {gnuplot_arrayname}[{n}] = [ {values_str} ]\n'
+        #     self.__preplot += array_str
+        #     if self.is_debug:
+        #         self.__preplot += f'print("GnuplotSnippet DEBUG: Number of datasets = {n} with Set IDs: {array_str}")\n'
         #
         blocks: list[str] = []
         for df in datasets:
-            blocks.append(format_dataframe(df, format_dict=format_dict))
+            blocks.append(format_dataframe(df, formatter=formatter))
         if datafile:
             with open(datafile, "w") as f:
                 f.write("\n\n".join(blocks))
@@ -429,7 +441,7 @@ class GnuplotSnippet():
                 escaped_filename = datafile.replace('"', '\\"')
                 self.__preplot += f'\
   print("GnuplotSnippet DEBUG: Python wrote multi-dataset datafile {escaped_filename}")\n\
-  print("GnuplotSnippet DEBUG: Usage example: plot {escaped_filename} for [i=1:|{gnuplot_arrayname}|] index i-1 using 1:2 title sprintf(\\"Contour = %s\\", {gnuplot_arrayname}[i]")\n'
+  print("GnuplotSnippet DEBUG: Usage example: plot {escaped_filename} for [i=1:3] index i-1 using 1:2 title sprintf(\\"Contour: %d\\",i")\n'
 
         return self.__preplot
 
