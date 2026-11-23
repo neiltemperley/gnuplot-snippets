@@ -7,14 +7,14 @@
 Typical use::
     from gnuplot_snippets import GnuplotController, GnuplotSnippet, escape_str, format_dataframe, next_datablock_counter
 """
-from .snippet import GnuplotSnippet, escape_str, format_dataframe, next_datablock_counter
+from .snippets import GnuplotSnippets, escape_str, format_dataframe, next_datablock_counter
 from .controller import GnuplotController
 
 # __all__ defines the public API for "from gnuplot_snippets import *"
 # and signals the public names to IDEs and static tools.
 __all__ = [
     "GnuplotController",
-    "GnuplotSnippet",
+    "GnuplotSnippets",
     "escape_str",
     "format_dataframe",
     "next_datablock_counter",

@@ -3,30 +3,33 @@
 # See the LICENSE file in the project root for full license text.
 # https://github.com/neiltemperley/gnuplot-snippets
 """Usage:
- cd Gnuplot_Snippets;
- pytest -s
+ python -m tests.test_plots
+ # OR but beware pytest mucks up interaction!
+ pytest -s 
 """
 import logging
 
 import pytest
-from gnuplot_snippets import (GnuplotController, GnuplotSnippet)
-from gnuplot_snippets.snippet import (_flatten_to_tuple_of_strings)
+from gnuplot_snippets import (GnuplotController, GnuplotSnippets)
+from gnuplot_snippets.snippets import (_flatten_to_tuple_of_strings)
 
-# ##############################################################
-logger = logging.getLogger("test")
-# Output to console:
-handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    "%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s")
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)  # INFO, DEBUG, WARNING, ERROR
+logger = logging.getLogger("gnuplot_snippets")
 
-# ##############################################################
+
+def enable_debug_logging(level=logging.DEBUG):
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s: %(levelname)-8s:%(name)-12s:%(lineno)4d: %(message)s"
+        ))
+    log = logging.getLogger("gnuplot_snippets")
+    log.addHandler(handler)
+    log.setLevel(level)
 
 
 # @pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
 def test_flatten_to_tuple_of_strings():
+    enable_debug_logging(level=logging.DEBUG)
     logger.debug("Args        \t= \"{}\"".format(
         _flatten_to_tuple_of_strings("Arg1", "Arg2", "Arg3")))
     logger.debug("Tuple       \t= \"{}\"".format(
@@ -42,7 +45,7 @@ def test_flatten_to_tuple_of_strings():
 
 # @pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
 def test_snippets():
-    gs1 = GnuplotSnippet()
+    gs1 = GnuplotSnippets()
     gs1.output_to_screen("set term qt")
     gs1.preplot("""
     set angle degrees
@@ -54,7 +57,7 @@ def test_snippets():
     logger.debug("gs1.plot_elements \t= \"{}\"".format(gs1.plot_elements()))
     # print(f"gss = {gs1}")
     #
-    gs2 = GnuplotSnippet()
+    gs2 = GnuplotSnippets()
     gs2.output_to_screen('set term qt')
     gs2.preplot("""
     set angle degrees
@@ -100,6 +103,5 @@ def test_comment_out_pause():
     assert True
 
 
-# test_snippets()
-# if __name__ == "__main__":
-#     test_snippets()
+if __name__ == "__main__":
+    test_snippets()

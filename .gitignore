@@ -3,7 +3,6 @@
 
 #========================================
 # Python
-**/.venv
 pyproject-pip.ztoml
 __pycache__/
 .ruff_cache/
@@ -23,8 +22,9 @@ build/
 
 #========================================
 # Emacs/General
-\#*
+\#*#
 *~
+.*#
 tags
 TAGS
 GTAGS
@@ -36,7 +36,7 @@ GTAGS
 
 #========================================
 # Core latex/pdflatex auxiliary files:
-/auto
+auto/
 *.aux
 *.brf
 *.cb
@@ -101,11 +101,10 @@ GTAGS
 
 #========================================
 # Specific to this Project
-# Neil
-# Any subdirectory:
-**/Old
-**/Junk
+Old/
+OLD/
+Junk/
 /Template*
 zDEMO-*
 zJUNK-*
-
+*.gp

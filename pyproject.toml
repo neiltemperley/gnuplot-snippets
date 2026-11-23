@@ -1,20 +1,32 @@
+# Useful:
+# poetry check
+# poetry show --outdated
+# toml-sort -i pyproject.toml
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[dependency-groups]
+dev = [
+  "pytest>=7.0,<8.0",
+  "flake8>=7.3.0,<8.0.0",
+  "isort>=9.0.0,<10.0.0"
+]
+
 [project]
 name = "gnuplot-snippets"
-version = "0.1.0"
+version = "0.1.4"
 description = "Composable gnuplot snippets for Python, for interactive and batch plotting by advanced users"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
-    { name = "Neil Temperley" },
+  { name = "Neil Temperley" }
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.10"
 dependencies = [
-    "pandas>=2.2.3",
+  "pandas>=2.2.3"
 ]
 
 [project.scripts]
@@ -26,13 +38,3 @@ Licence = "https://github.com/neiltemperley/gnuplot-snippets/blob/main/LICENSE"
 
 [tool.poetry]
 packages = [{ include = "gnuplot_snippets", from = "src" }]
-
-[dependency-groups]
-dev = [
-    "pytest>=7.0,<8.0",
-    "flake8>=7.3.0,<8.0.0",
-    "isort>=9.0.0,<10.0.0",
-]
-
-
-
