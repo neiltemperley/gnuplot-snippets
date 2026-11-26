@@ -441,7 +441,7 @@ class GnuplotSnippets():
         """Append one or more post_plot_cmds to the postplot snippet to be sent to gnuplot after plotting.
         
         Usually "unset" commands, e.g. unset label; unset arrow;  etc.
-        Note: "unset multiplot" is not required in a snippet; it is done automatically by
+        Note: "unset multiplot" is not required in this snippet; it is done automatically by
               GnuplotController.postmultiplot().
         
         Examples to consider: "unset format x; unset xdata; unset x2tics; unset x2mtics; unset y2mtics;"
@@ -457,7 +457,7 @@ class GnuplotSnippets():
          gc = GnuplotController() 
          gc.preplot(gs1.preplot())
          gc.plot(gs1.plot_elements(), pause=-1)
-         gc.postplot(gs1.postplot()) # Tidy up before the next plot.
+         gc.postplot(gs1.postplot()) # tidy up before the next plot.
          gc.plot(gs2.plot_elements(), pause=-1)
          gc.close()
         

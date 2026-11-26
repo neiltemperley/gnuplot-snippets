@@ -19,7 +19,7 @@ rescripting per plot.
 - Interactive gradient and coordinate measurement via mouse.
 - Batch-mode rendering for publication workflows.
 - Logging and optional gnuplot stand-alone script dumping for debug and inspection.
-- Python source markers in logs and stand-alone scripts.
+- Python source markers in stand-alone scripts.
 - Neat human-readable formatting of gnuplot datablocks and datafiles.
 
 ## Overview

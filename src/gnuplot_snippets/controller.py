@@ -32,8 +32,10 @@ class GnuplotController:
     debug script is written, even when an exception occurs::
 
         with GnuplotController(script_filename="debug.gp") as gc:
+            gc.preplot('set title "sine curve"', 'set angle degrees', 'set xrange [-360:360]')
             gc.plot("sin(x)", pause=-1)
-
+    
+    Note: GnuplotController() can be used standalone but works best with GnuplotSnippets().
     Note: commands are passed to gnuplot unchanged (including ``system``),
     so never pass untrusted input.
     """
@@ -44,8 +46,17 @@ class GnuplotController:
                  gnuplot_executable: str = "gnuplot") -> None:
         """Open gnuplot as a subprocess.
 
+        Example without GnuplotSnippets::
+        
+            gc = GnuplotController()
+            gc.preplot('set title "Some curves"', 'set angle degrees')
+            gc.plot("sin(x)", "cos(x)", pause=4)
+            gc.plot("sin(x)", "tan(x)", pause=5)
+            gc.close()
+
         :param debug: If True, print the recorded gnuplot script on close.
-        :param script_filename: If set, write the recorded script here on close.
+        :param script_filename: If set, write the recorded script here on close.  Useful
+            for debugging gnupot errors by "gnuplot ``script_filename``".
         :param gnuplot_executable: Name or path of the gnuplot executable.
         """
         # Plain attributes first so close() is always safe to call:
@@ -115,25 +126,6 @@ class GnuplotController:
         ) + "\n"
         self.script += cmd_source + logged
 
-    def cmdOLD(self, gnuplot_str: str, show_source: bool = False) -> None:
-        """Send a command str to gnuplot ensuring a newline termination.
-
-        :param gnuplot_str: Raw gnuplot command(s).
-        :param show_source: If True, record the calling file and line in the script.
-        """
-        cmd_source: str = f'# {_source(is_snippet=False)}\n' if show_source else ""
-        gnuplot_str = gnuplot_str.rstrip() + "\n"
-        stdin = self.gnuplot.stdin
-        if stdin is None:
-            raise GnuplotError("gnuplot stdin is not available!")
-        try:
-            stdin.write(gnuplot_str)
-            stdin.flush()
-        except (BrokenPipeError, ValueError, OSError) as e:
-            raise GnuplotError("gnuplot process has exited!") from e
-        # Record only what gnuplot actually received:
-        self.script += cmd_source + gnuplot_str
-
     def preplot(self, *cmds: str, show_source: bool = False) -> None:
         """Send setup commands.
 
@@ -173,7 +165,7 @@ class GnuplotController:
             gc.premultiplot_to_file('set terminal pngcairo size 1000,1000',
                                     'set multiplot layout 1,2',
                                     filename='file.png')
-            # ...preplot(), plot() and postplot() for each plot...
+            # then gc.preplot(...), gc.plot(...) and gc.postplot(...) for each plot...
             gc.postmultiplot()
 
         :param set_cmds: A 'set terminal ...' command plus 'set multiplot ...' plus any others.
@@ -191,10 +183,6 @@ class GnuplotController:
             # Neither given: leave terminal/output as already configured.
             self.cmd(_clean_cmds(cmd_source, 'unset multiplot', *set_cmds))
             return
-        # ASSUMPTION: set_cmds entries are compared as given; if
-        # _extract_set_terminal_cmd normalises the command text, use its
-        # second return value for the remainder instead.
-        # remaining = [c for c in set_cmds if c != set_terminal_cmd]
         self.cmd(
             _clean_cmds(cmd_source, 'unset multiplot', set_terminal_cmd,
                         f"set output {_gp_quote(filename)}", *remaining))
@@ -211,7 +199,7 @@ class GnuplotController:
 
             gc.premultiplot_to_screen('set terminal qt 1000,1000 title "Multiplot"',
                                       'set multiplot layout 1,2')
-            # ...preplot(), plot() and postplot() for each plot...
+            # then gc.preplot(...), gc.plot(...) and gc.postplot(...) for each plot...
             gc.postmultiplot()
 
         :param set_cmds: A screen 'set terminal ...' command plus 'set multiplot ...' plus any others.
@@ -233,6 +221,14 @@ class GnuplotController:
         Note: Once premultiplot_to_xxxx() is called, any 'set terminal' commands in
               snippets are blocked until an 'unset multiplot' is sent.
 
+        Example::
+
+            gc.premultiplot_to_screen('set terminal qt 1000,1000 title "Multiplot"',
+                                      'set multiplot layout 1,2')
+            # then gc.preplot(...), gc.plot(...) and gc.postplot(...) for each plot...
+            gc.postmultiplot()
+
+
         :param cmds: Extra gnuplot commands to send after 'unset multiplot'.
         :param show_source: If True, record the calling file and line in the script.
         """
@@ -252,6 +248,17 @@ class GnuplotController:
 
         When a pause is used, Python waits until it completes, keeping the
         gnuplot window and the Python terminal in sync during interaction.
+
+        Example::
+        
+        gc = GnuplotController()
+        gc.preplot('set title "Some curves"', 'set angle degrees')
+        # gc.plot(gs1.plot_elements(), gs2.plot_elements(), pause=-1) # e.g. with GnuplotSnippets gs1 and gs2
+        gc.plot("sin(x)", "cos(x)", pause=4)  # without GnuplotSnippets
+        gc.plot("sin(x)", "tan(x)", plot_and_ranges="plot [-70:70]", pause=5)  # without GnuplotSnippets
+        gc.preplot("unset angle")
+        # ..other GnuplotController commands
+        gc.close()
 
         :param plot_elements: gnuplot plot elements, e.g. "sin(x)" or "'data.csv' using 1:2".
         :param pause: How to pause after plotting. -1 waits for user input,
@@ -296,11 +303,11 @@ class GnuplotController:
             send_cmd = base + f"\npause {pause}\n"
             # Write user-friendly versions to script file:
             if pause < 0:
-                script_cmd = base + f'\npause {pause} "Press Enter to continue..."\n'
+                script_cmd = base + f'\npause {pause} "Gnuplot: Press Enter to continue..."\n'
             elif pause == 0:
                 script_cmd = base + f'\npause {pause} \n'  # no message
             else:
-                script_cmd = base + f'\npause {pause} "Pausing for {pause} seconds..."\n'
+                script_cmd = base + f'\npause {pause} "Gnuplot: Pausing for {pause} seconds..."\n'
         self.cmd(send_cmd, script_str=script_cmd)  # send it
 
         # --------------------------------------------------------------
@@ -396,27 +403,34 @@ class GnuplotController:
 
     def _shutdown(self) -> None:
         """Ask gnuplot to exit, escalating to terminate then kill if it hangs."""
-        if self.gnuplot.poll() is not None:
-            return  # already exited
-        try:
-            if self.gnuplot.stdin is not None:
-                self.gnuplot.stdin.write("exit\n")  # End gnuplot gracefully
-                self.gnuplot.stdin.close()
-        except (OSError, ValueError) as e:
-            print(f"Python: Error closing gnuplot: {e}")
-        try:
-            self.gnuplot.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            self.gnuplot.terminate()
+        if self.gnuplot.poll() is None:
             try:
-                self.gnuplot.wait(timeout=2)
+                if self.gnuplot.stdin is not None:
+                    self.gnuplot.stdin.write(
+                        "exit\n")  # End gnuplot gracefully
+                    self.gnuplot.stdin.close()
+            except (OSError, ValueError) as e:
+                print(f"Python: Error closing gnuplot: {e}")
+            try:
+                self.gnuplot.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                self.gnuplot.kill()
-                self.gnuplot.wait()
+                self.gnuplot.terminate()
+                try:
+                    self.gnuplot.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    self.gnuplot.kill()
+                    self.gnuplot.wait()
+        # Check if gnuplot returned an error:
+        if self.gnuplot.returncode:  # non-zero (and not None)
+            print(
+                f"\nPython: gnuplot reported an error! To find the exact line, run:\n"
+                f"    gnuplot \"{self.script_filename}\"\n"
+                f"Then open \"{self.script_filename}\" and look for the comments \n"
+                "near that line that point back to the Python source.\n")
 
     def _mouse_measurement_cmds(self) -> str:
         """Gnuplot code that adds the ability to measure deltas and gradients using
-        the mouse on an interactive plot.
+        the mouse on an interactive plot.  Very cool!
 
         When in use press 'm' or 'M' in plot window to get started or Esc or Return to quit.
         The measurement labels are removed again on exit.

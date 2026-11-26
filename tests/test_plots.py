@@ -11,7 +11,9 @@ import logging
 
 import pytest
 from gnuplot_snippets import (GnuplotController, GnuplotSnippets)
+import gnuplot_snippets
 from gnuplot_snippets.snippets import (_flatten_to_tuple_of_strings)
+from gnuplot_snippets.demo import main as demo
 
 logger = logging.getLogger("gnuplot_snippets")
 
@@ -27,7 +29,7 @@ def enable_debug_logging(level=logging.DEBUG):
     log.setLevel(level)
 
 
-# @pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
+# @pytest.mark.skip(reason="Skip for now")
 def test_flatten_to_tuple_of_strings():
     enable_debug_logging(level=logging.DEBUG)
     logger.debug("Args        \t= \"{}\"".format(
@@ -84,13 +86,13 @@ def test_snippets():
     return
 
 
-@pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
-def test_run_script_available():
-    # interaction_demo()
+#@pytest.mark.skip(reason="Skip for now")
+def test_demo():
+    demo()  # demo file provided with code
     pass
 
 
-@pytest.mark.skip(reason="Skip for now")  # decorator directly above function.
+@pytest.mark.skip(reason="Skip for now")
 def test_comment_out_pause():
     # interaction_demo()
     gc = GnuplotController(debug=True)
@@ -98,10 +100,52 @@ def test_comment_out_pause():
         'plot sin(x);pause -1 "Hello"; print("Goodbye")\npause mouse "This is a test"\npause 10\n',
         'pause -1 "Second Line"')
     gc.close()
-    #assert callable(run_script)
-    #assert callable(run_script)
     assert True
 
 
+@pytest.mark.skip(reason="Skip for now")
+def test_GnuplotController_example():
+    """Cut and paste from example in code:"""
+    with GnuplotController(script_filename="debug.gp") as gc:
+        gc.preplot('set title "sine curve"', 'set angle degrees',
+                   'set xrange [-360:360]')
+        gc.plot("sin(x)", pause=-1)
+
+
+@pytest.mark.skip(reason="Skip for now")
+def test_GnuplotController_plot_example():
+    """Cut and paste from example in code:"""
+    gc = GnuplotController()
+    gc.preplot('set title "Some curves"', 'set angle degrees')
+    # gc.plot(gs1.plot_elements(), gs2.plot_elements(), pause=-1) # e.g. with GnuplotSnippets gs1 and gs2
+    gc.plot("sin(x)", "cos(x)", pause=4)  # without GnuplotSnippets
+    gc.plot("sin(x)", "tan(x)", plot_and_ranges="plot [-70:70]",
+            pause=5)  # without GnuplotSnippets
+    gc.preplot("unset angle")
+    # ..other GnuplotController commands
+    gc.close()
+
+
+#@pytest.mark.skip(reason="Skip for now")
+def test_gnuplot_error():
+    try:
+        with GnuplotController(
+                script_filename="zTEST-GNUPLOT_ERROR_script.gp") as gc:
+            gc.preplot("set angle junk")
+            gc.close()
+    except Exception as e:
+        print(type(e).__name__, e)
+    assert True
+
+
+# ##############################################################
 if __name__ == "__main__":
-    test_snippets()
+    """Run with
+        python -m tests.test_plots
+    to just test these methods."""
+    enable_debug_logging(level=logging.DEBUG)
+    #
+    test_GnuplotController_example()
+    test_GnuplotController_plot_example()
+    # test_snippets()
+    test_gnuplot_error()
