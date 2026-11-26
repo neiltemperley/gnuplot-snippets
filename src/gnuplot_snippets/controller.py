@@ -13,14 +13,11 @@ from datetime import datetime
 from types import TracebackType
 from typing import Literal
 
-from .snippets import (_clean_cmds, _extract_set_terminal_cmd,
-                       _flatten_to_tuple_of_strings, _source, GnuplotError)
+from ._utils import (_clean_cmds, _extract_set_terminal_cmd,
+                     _flatten_to_tuple_of_strings, _source)
+from .errors import GnuplotError, GnuplotNotFoundError
 
 logger = logging.getLogger("gnuplot_snippets")
-
-
-class GnuplotNotFoundError(GnuplotError, RuntimeError):
-    """Raised when the gnuplot executable cannot be found."""
 
 
 def _gp_quote(text: str) -> str:
@@ -59,15 +56,13 @@ class GnuplotController:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.script = (
             "# Gnuplot script particularly useful for debugging gnuplot errors by running \"gnuplot script_filename\" in a terminal.\n"
-            "# Note however, the script has NO prompts, such as \"Press Enter to continue\"!\n"
             f"# Created on {timestamp}\n\n")
 
         self.gnuplot_path = self._find_gnuplot(gnuplot_executable)
         self.gnuplot = subprocess.Popen(
             [self.gnuplot_path],  # don't want -persistent switch!
             stdin=subprocess.PIPE,
-            text=True,  # new
-            ## text=True,
+            text=True,
             # universal_newlines=True,
             encoding="utf-8")
 
@@ -302,6 +297,8 @@ class GnuplotController:
             # Write user-friendly versions to script file:
             if pause < 0:
                 script_cmd = base + f'\npause {pause} "Press Enter to continue..."\n'
+            elif pause == 0:
+                script_cmd = base + f'\npause {pause} \n'  # no message
             else:
                 script_cmd = base + f'\npause {pause} "Pausing for {pause} seconds..."\n'
         self.cmd(send_cmd, script_str=script_cmd)  # send it

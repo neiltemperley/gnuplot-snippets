@@ -354,8 +354,7 @@ def main() -> None:
         f'The preceding code has generated one long gnuplot script file "{demo_script_filename}"\n'
         'The file contains useful links back to the python source code.\n\n'
         f'Try running the demo script file directly using "gnuplot {demo_script_filename}"\n'
-        "This is very useful for debugging gnuplot commands.\n"
-        "Note however, the script has NO prompts, such as \"Press Enter to continue\"!\n"
+        "This is very useful for debugging gnuplot commands and replaying the session.\n"
     )
 
 
