@@ -127,7 +127,6 @@ class Car:
 
     def gnuplot(self) -> GnuplotSnippets:
         gs = GnuplotSnippets()
-		# Append to output_to_screen() snippet:
         gs.output_to_screen(
             'set terminal qt title "Car Performance"',
             'set xlabel "Time [s]"; set format x',
