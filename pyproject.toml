@@ -16,8 +16,9 @@ dev = [
 
 [project]
 name = "gnuplot-snippets"
-version = "0.1.5"
+version = "0.1.6"
 description = "Composable gnuplot snippets for Python, for interactive and batch plotting by advanced users"
+keywords = ["gnuplot", "plotting", "snippets", "visualization"]
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

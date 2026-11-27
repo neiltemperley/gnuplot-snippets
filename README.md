@@ -100,18 +100,16 @@ To try it in a throwaway environment first:
 deactivate 2>/dev/null   # exit any active environment
 mkdir -p ~/tmp
 cd ~/tmp
-python3 -m venv ~/tmp/gp-snippets-test
-source ~/tmp/gp-snippets-test/bin/activate
-# On Windows: %USERPROFILE%\tmp\gp-snippets-test\Scripts\activate
-python -m pip install --upgrade pip
+python3 -m venv gp-snippets-test
+source gp-snippets-test/bin/activate
 pip install gnuplot-snippets
 
 # Check it works:
 pip show -f gnuplot-snippets
-python -c "import gnuplot_snippets; print(gnuplot_snippets.__file__)"
+gnuplot-snippets-demo
 ```
 
-Then run the demo (see [Full demo](#full-demo) below).
+See [Full demo](#full-demo) below.
 
 ## Quick example
 
